@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Hub de Análises - Sure2</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-header">
+    <h1>Jogos Analisados</h1>
+    <input type="date" id="filtro-data">
+  </div>
+
+  <!-- Grade com os Cards dos Jogos -->
+  <div class="games-grid" id="lista-jogos">
+    <!-- Cards renderizados via JS -->
+  </div>
+
+  <!-- Modal com Probabilidades do Jogo Selecionado -->
+  <div id="modal-jogo" class="modal hidden">
+    <div class="modal-content">
+      <span class="close-btn" onclick="fecharModal()">&times;</span>
+      <div id="detalhes-jogo"></div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
