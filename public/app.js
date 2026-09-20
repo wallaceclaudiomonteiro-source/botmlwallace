@@ -116,40 +116,40 @@ function gerarHTMLMercados(mercados, prefixo) {
         return `<div class="prob-bar" style="opacity: ${opacidade};"><span>${nome} ${formatarHistorico(hist)}</span><strong>${esc(valor)}%</strong></div>`;
     };
 
-    // Função auxiliar para montar os blocos de Totais Esperados (Gols, Cantos e Cartões)
-    const renderEsperados = () => {
+    // Design moderno em caixinhas (Grid)
+    const renderEsperadosGrid = () => {
         const golsT = mercados[`${prefixo}exp_gols_totais`];
         const cantosT = mercados[`${prefixo}exp_cantos_totais`];
         const cartoesT = mercados[`${prefixo}exp_cartoes_totais`];
 
-        // Se não tiver nenhum dos três (ex: jogo não tem dados), não renderiza o bloco
+        // Se não tiver nenhum dado esperado, retorna vazio
         if (!golsT && !cantosT && !cartoesT) return '';
 
         let html = `<div class="market-group">
-            <h3>🎯 Totais Esperados</h3>
+            <h3 style="margin-bottom: 12px;">🎯 Totais Esperados</h3>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px;">`;
 
         if (golsT) {
-            html += `<div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
-                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">⚽ Gols (Total: ${golsT})</div>
-                <div style="font-size: 12px;">🏠 Casa: ${mercados[`${prefixo}exp_gols_casa`] || '-'}</div>
-                <div style="font-size: 12px;">✈️ Fora: ${mercados[`${prefixo}exp_gols_fora`] || '-'}</div>
+            html += `<div style="background: rgba(255,255,255,0.05); padding: 10px 12px; border-radius: 8px; flex: 1; min-width: 140px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 6px; font-weight: bold;">⚽ Gols (Total: ${golsT})</div>
+                <div style="font-size: 13px; color: #fff; margin-bottom: 2px;">🏠 Casa: ${mercados[`${prefixo}exp_gols_casa`] || '-'}</div>
+                <div style="font-size: 13px; color: #fff;">✈️ Fora: ${mercados[`${prefixo}exp_gols_fora`] || '-'}</div>
             </div>`;
         }
 
         if (cantosT) {
-            html += `<div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
-                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🚩 Cantos (Total: ${cantosT})</div>
-                <div style="font-size: 12px;">🏠 Casa: ${mercados[`${prefixo}exp_cantos_casa`] || '-'}</div>
-                <div style="font-size: 12px;">✈️ Fora: ${mercados[`${prefixo}exp_cantos_fora`] || '-'}</div>
+            html += `<div style="background: rgba(255,255,255,0.05); padding: 10px 12px; border-radius: 8px; flex: 1; min-width: 140px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 6px; font-weight: bold;">🚩 Cantos (Total: ${cantosT})</div>
+                <div style="font-size: 13px; color: #fff; margin-bottom: 2px;">🏠 Casa: ${mercados[`${prefixo}exp_cantos_casa`] || '-'}</div>
+                <div style="font-size: 13px; color: #fff;">✈️ Fora: ${mercados[`${prefixo}exp_cantos_fora`] || '-'}</div>
             </div>`;
         }
 
         if (cartoesT) {
-            html += `<div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
-                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🟨 Cartões (Total: ${cartoesT})</div>
-                <div style="font-size: 12px;">🏠 Casa: ${mercados[`${prefixo}exp_cartoes_casa`] || '-'}</div>
-                <div style="font-size: 12px;">✈️ Fora: ${mercados[`${prefixo}exp_cartoes_fora`] || '-'}</div>
+            html += `<div style="background: rgba(255,255,255,0.05); padding: 10px 12px; border-radius: 8px; flex: 1; min-width: 140px; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 6px; font-weight: bold;">🟨 Cartões (Total: ${cartoesT})</div>
+                <div style="font-size: 13px; color: #fff; margin-bottom: 2px;">🏠 Casa: ${mercados[`${prefixo}exp_cartoes_casa`] || '-'}</div>
+                <div style="font-size: 13px; color: #fff;">✈️ Fora: ${mercados[`${prefixo}exp_cartoes_fora`] || '-'}</div>
             </div>`;
         }
 
@@ -157,13 +157,15 @@ function gerarHTMLMercados(mercados, prefixo) {
         return html;
     };
 
-    // Se não existir sequer o Match Odds para esse tempo, retorna vazio.
     if (mercados[`${prefixo}p_home`] === undefined) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Dados não disponíveis para este período na base de dados.</div>`;
 
     const premiumClass = isPremium ? "" : "locked-content";
     const avisoVIP = isPremium ? "" : `<div class="locked-warning" onclick="fecharModalJogo(); abrirLogin();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>`;
 
     return `
+        <!-- CAIXINHAS MODERNAS NO TOPO DA TELA -->
+        ${renderEsperadosGrid()}
+        
         <div class="market-group">
             <h3>⚽ Match Odds (1X2)</h3>
             ${m('Casa', 'home')} ${m('Empate', 'draw')} ${m('Fora', 'away')}
@@ -174,12 +176,9 @@ function gerarHTMLMercados(mercados, prefixo) {
             ${m('Under 1.5', 'under15')} ${m('Under 2.5', 'under25')}
         </div>
         
-        <!-- AQUI ENTRAM OS TOTAIS ESPERADOS (Só no VIP) -->
         <div class="locked-container">
             ${avisoVIP}
             <div class="${premiumClass}">
-                ${renderEsperados()}
-                
                 <div class="market-group">
                     <h3>💎 Ambas Marcam</h3>
                     ${m('Ambas - Sim', 'btts_yes')} ${m('Ambas - Não', 'btts_no')}
