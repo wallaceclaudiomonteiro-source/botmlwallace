@@ -116,6 +116,47 @@ function gerarHTMLMercados(mercados, prefixo) {
         return `<div class="prob-bar" style="opacity: ${opacidade};"><span>${nome} ${formatarHistorico(hist)}</span><strong>${esc(valor)}%</strong></div>`;
     };
 
+    // Função auxiliar para montar os blocos de Totais Esperados (Gols, Cantos e Cartões)
+    const renderEsperados = () => {
+        const golsT = mercados[`${prefixo}exp_gols_totais`];
+        const cantosT = mercados[`${prefixo}exp_cantos_totais`];
+        const cartoesT = mercados[`${prefixo}exp_cartoes_totais`];
+
+        // Se não tiver nenhum dos três (ex: jogo não tem dados), não renderiza o bloco
+        if (!golsT && !cantosT && !cartoesT) return '';
+
+        let html = `<div class="market-group">
+            <h3>🎯 Totais Esperados</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 5px;">`;
+
+        if (golsT) {
+            html += `<div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">⚽ Gols (Total: ${golsT})</div>
+                <div style="font-size: 12px;">🏠 Casa: ${mercados[`${prefixo}exp_gols_casa`] || '-'}</div>
+                <div style="font-size: 12px;">✈️ Fora: ${mercados[`${prefixo}exp_gols_fora`] || '-'}</div>
+            </div>`;
+        }
+
+        if (cantosT) {
+            html += `<div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🚩 Cantos (Total: ${cantosT})</div>
+                <div style="font-size: 12px;">🏠 Casa: ${mercados[`${prefixo}exp_cantos_casa`] || '-'}</div>
+                <div style="font-size: 12px;">✈️ Fora: ${mercados[`${prefixo}exp_cantos_fora`] || '-'}</div>
+            </div>`;
+        }
+
+        if (cartoesT) {
+            html += `<div style="background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; flex: 1; min-width: 140px;">
+                <div style="font-size: 11px; color: #94a3b8; margin-bottom: 4px;">🟨 Cartões (Total: ${cartoesT})</div>
+                <div style="font-size: 12px;">🏠 Casa: ${mercados[`${prefixo}exp_cartoes_casa`] || '-'}</div>
+                <div style="font-size: 12px;">✈️ Fora: ${mercados[`${prefixo}exp_cartoes_fora`] || '-'}</div>
+            </div>`;
+        }
+
+        html += `</div></div>`;
+        return html;
+    };
+
     // Se não existir sequer o Match Odds para esse tempo, retorna vazio.
     if (mercados[`${prefixo}p_home`] === undefined) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Dados não disponíveis para este período na base de dados.</div>`;
 
@@ -132,9 +173,13 @@ function gerarHTMLMercados(mercados, prefixo) {
             ${m('Over 0.5', 'over05')} ${m('Over 1.5', 'over15')} ${m('Over 2.5', 'over25')}
             ${m('Under 1.5', 'under15')} ${m('Under 2.5', 'under25')}
         </div>
+        
+        <!-- AQUI ENTRAM OS TOTAIS ESPERADOS (Só no VIP) -->
         <div class="locked-container">
             ${avisoVIP}
             <div class="${premiumClass}">
+                ${renderEsperados()}
+                
                 <div class="market-group">
                     <h3>💎 Ambas Marcam</h3>
                     ${m('Ambas - Sim', 'btts_yes')} ${m('Ambas - Não', 'btts_no')}
