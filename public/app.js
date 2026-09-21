@@ -50,7 +50,7 @@ async function carregarJogos(dataSelecionada) {
     try {
         // Mostra que está carregando enquanto baixa o arquivo levinho do dia
         listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Carregando jogos...</p>`;
-        
+
         // Baixa apenas o dia específico (Truque Anti-Cache)
         const antiCache = new Date().getTime();
         const res = await fetch(`dados/${dataSelecionada}.json?v=${antiCache}`);
@@ -67,7 +67,7 @@ async function carregarJogos(dataSelecionada) {
         jogos.forEach(jogo => {
             const m = jogo.mercados || {};
             let gJogo = 0, rJogo = 0, pJogo = 0;
-            
+
             // Só conta os sinais do FT para o card inicial não ficar poluído
             chavesMercadosFT_ParaContagem.forEach(merc => {
                 const hist = m[`hist_${merc}`];
@@ -75,12 +75,12 @@ async function carregarJogos(dataSelecionada) {
                     const resReal = m[`res_${merc}`];
                     if (resReal === 'GREEN') { greensDia++; gJogo++; }
                     else if (resReal === 'RED') { redsDia++; rJogo++; }
-                    else { pJogo++; } 
+                    else { pJogo++; }
                 }
             });
 
-            let badgeSinais = (gJogo + rJogo + pJogo) > 0 
-                ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Sinais FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>` 
+            let badgeSinais = (gJogo + rJogo + pJogo) > 0
+                ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Sinais FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>`
                 : `<div style="margin-top: 10px; font-size: 11px; color: #64748b; text-align: center;">Nenhum padrão encontrado no FT</div>`;
 
             const card = document.createElement('div');
@@ -112,9 +112,9 @@ async function carregarJogos(dataSelecionada) {
             htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corTaxa}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corTaxa};">📈 ${taxaAcerto}% de acerto</span>`;
         }
         resumoEl.innerHTML = htmlResumo;
-        
-    } catch (err) { 
-        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`; 
+
+    } catch (err) {
+        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`;
     }
 }
 
@@ -250,7 +250,66 @@ function gerarHTMLMercados(mercados, prefixo) {
         </div>
     `;
 }
+function nomeMercado(chave) {
+    const fixos = { home: 'Casa (1)', draw: 'Empate', away: 'Fora (2)', btts_yes: 'Ambas - Sim', btts_no: 'Ambas - Não' };
+    if (fixos[chave]) return fixos[chave];
 
+    let c = chave, quem = '', tipo = '';
+    if (c.startsWith('casa_')) { quem = 'Casa '; c = c.slice(5); }
+    else if (c.startsWith('fora_')) { quem = 'Fora '; c = c.slice(5); }
+
+    if (c.startsWith('cantos_')) { tipo = 'Cantos '; c = c.slice(7); }
+    else if (c.startsWith('cartoes_')) { tipo = 'Cartões '; c = c.slice(8); }
+
+    const m = c.match(/^(over|under)(\d)(\d)$/);
+    const linha = m ? `${m[1] === 'over' ? 'Over' : 'Under'} ${m[2]}.${m[3]}` : c;
+    return `${quem}${tipo}${linha}`;
+}
+
+function gerarHTMLResultados(mercados) {
+    const periodos = [
+        { prefixo: '', titulo: 'Jogo (FT)' },
+        { prefixo: 'ht_', titulo: '1º Tempo (HT)' },
+        { prefixo: 'st_', titulo: '2º Tempo (2T)' }
+    ];
+    let html = '';
+
+    periodos.forEach(({ prefixo, titulo }) => {
+        const inicio = `${prefixo}hist_`;
+        let g = 0, r = 0, p = 0, linhas = '';
+
+        Object.keys(mercados).forEach(key => {
+            if (!key.startsWith(inicio)) return;
+            const hist = mercados[key];
+            if (!hist || hist.status !== 'ok') return;
+
+            const merc = key.slice(inicio.length);
+            const res = mercados[`${prefixo}res_${merc}`];
+            const prob = mercados[`${prefixo}p_${merc}`];
+
+            let icone = '⏳', cor = '#94a3b8';
+            if (res === 'GREEN') { icone = '🟢'; cor = '#a6e3a1'; g++; }
+            else if (res === 'RED') { icone = '🔴'; cor = '#f38ba8'; r++; }
+            else p++;
+
+            linhas += `<div class="prob-bar"><span>${nomeMercado(merc)}<small style="color:#64748b;">Prob: ${esc(prob)}%</small></span><strong style="color:${cor};">${icone} ${res || 'Pendente'}</strong></div>`;
+        });
+
+        if (!linhas) return;
+        html += `<div class="market-group">
+            <h3>${titulo} &nbsp;•&nbsp; <span style="color:#a6e3a1;">${g}G</span> | <span style="color:#f38ba8;">${r}R</span>${p > 0 ? ` | <span style="color:#94a3b8;">${p}⏳</span>` : ''}</h3>
+            ${linhas}
+        </div>`;
+    });
+
+    if (!html) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Nenhum sinal encontrado neste jogo.</div>`;
+
+    if (isPremium) return html;
+    return `<div class="locked-container">
+        <div class="locked-warning" onclick="fecharModalJogo(); abrirLogin();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
+        <div class="locked-content">${html}</div>
+    </div>`;
+}
 async function abrirDetalhesJogo(jogo) {
     try {
         const classCasa = jogo.classificacao?.casa || {};
@@ -287,7 +346,8 @@ async function abrirDetalhesJogo(jogo) {
                 <button id="btn-tab-mercados" class="tab-btn active" onclick="mudarAbaPrincipal('mercados')">📊 Mercados</button>
                 <button id="btn-tab-classificacao" class="tab-btn" onclick="mudarAbaPrincipal('classificacao')">🏆 Classificação</button>
                 <button id="btn-tab-artilheiros" class="tab-btn" onclick="mudarAbaPrincipal('artilheiros')">⚽ Artilheiros</button>
-            </div>
+                <button id="btn-tab-resultados" class="tab-btn" onclick="mudarAbaPrincipal('resultados')">✅ Resultados</button>
+             </div>
 
             <div id="aba-mercados">
                 <div class="market-group" style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 15px;">
@@ -320,17 +380,19 @@ async function abrirDetalhesJogo(jogo) {
             <div id="aba-artilheiros" style="display: none;">
                 <table class="tabela-class"><thead><tr><th width="10%">#</th><th class="text-left" width="60%">Jogador</th><th width="15%">Gols</th><th width="15%">Ast</th></tr></thead><tbody>${htmlArtilheiros}</tbody></table>
             </div>
+           
+            <div id="aba-resultados" style="display: none;">
+             ${gerarHTMLResultados(jogo.mercados || {})}
+            </div>
         `;
 
         modalJogo.classList.remove('hidden');
 
         window.mudarAbaPrincipal = function (aba) {
-            document.getElementById('aba-mercados').style.display = aba === 'mercados' ? 'block' : 'none';
-            document.getElementById('aba-classificacao').style.display = aba === 'classificacao' ? 'block' : 'none';
-            document.getElementById('aba-artilheiros').style.display = aba === 'artilheiros' ? 'block' : 'none';
-            document.getElementById('btn-tab-mercados').classList.toggle('active', aba === 'mercados');
-            document.getElementById('btn-tab-classificacao').classList.toggle('active', aba === 'classificacao');
-            document.getElementById('btn-tab-artilheiros').classList.toggle('active', aba === 'artilheiros');
+            ['mercados', 'classificacao', 'artilheiros', 'resultados'].forEach(a => {
+                document.getElementById(`aba-${a}`).style.display = a === aba ? 'block' : 'none';
+                document.getElementById(`btn-tab-${a}`).classList.toggle('active', a === aba);
+            });
         };
 
         window.mudarTempo = function (tempo) {

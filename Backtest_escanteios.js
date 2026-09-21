@@ -270,4 +270,4 @@ async function rodarBacktest(dataInicio, dataFim) {
     }
 }
 
-rodarBacktest('2023-01-01', '2026-09-07');
+rodarBacktest('2025-01-01', '2026-09-20');
