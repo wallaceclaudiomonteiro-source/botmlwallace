@@ -50,7 +50,7 @@ async function carregarJogos(dataSelecionada) {
     try {
         // Mostra que está carregando enquanto baixa o arquivo levinho do dia
         listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Carregando jogos...</p>`;
-
+        
         // Baixa apenas o dia específico (Truque Anti-Cache)
         const antiCache = new Date().getTime();
         const res = await fetch(`dados/${dataSelecionada}.json?v=${antiCache}`);
@@ -62,25 +62,25 @@ async function carregarJogos(dataSelecionada) {
         }
 
         listaJogos.innerHTML = '';
-        let greensDia = 0, redsDia = 0, pendentesDia = 0;
+        let greensDia = 0, redsDia = 0;
 
         jogos.forEach(jogo => {
             const m = jogo.mercados || {};
             let gJogo = 0, rJogo = 0, pJogo = 0;
-
+            
             // Só conta os sinais do FT para o card inicial não ficar poluído
-            chavesMercados.forEach(merc => {
+            chavesMercadosFT_ParaContagem.forEach(merc => {
                 const hist = m[`hist_${merc}`];
                 if (hist && hist.status === 'ok') {
                     const resReal = m[`res_${merc}`];
                     if (resReal === 'GREEN') { greensDia++; gJogo++; }
                     else if (resReal === 'RED') { redsDia++; rJogo++; }
-                    else { pendentesDia++; pJogo++; }
+                    else { pJogo++; } 
                 }
             });
 
-            let badgeSinais = (gJogo + rJogo + pJogo) > 0
-                ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Sinais FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>`
+            let badgeSinais = (gJogo + rJogo + pJogo) > 0 
+                ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Sinais FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>` 
                 : `<div style="margin-top: 10px; font-size: 11px; color: #64748b; text-align: center;">Nenhum padrão encontrado no FT</div>`;
 
             const card = document.createElement('div');
@@ -101,12 +101,20 @@ async function carregarJogos(dataSelecionada) {
             resumoEl.style.display = 'inline-flex'; resumoEl.style.alignItems = 'center'; resumoEl.style.marginLeft = '15px'; resumoEl.style.gap = '8px'; resumoEl.style.fontSize = '12px'; resumoEl.style.fontWeight = 'bold';
             seletor.parentNode.insertBefore(resumoEl, seletor.nextSibling);
         }
-        let htmlResumo = `<span style="background: rgba(166, 227, 161, 0.15); color: #a6e3a1; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(166,227,161,0.3);">🟢 ${greensDia} Greens</span><span style="background: rgba(243, 139, 168, 0.15); color: #f38ba8; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(243,139,168,0.3);">🔴 ${redsDia} Reds</span>`;
-        if (pendentesDia > 0) htmlResumo += `<span style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(148,163,184,0.3);">⏳ ${pendentesDia} Pendentes</span>`;
-        resumoEl.innerHTML = htmlResumo;
 
-    } catch (err) {
-        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`;
+        const totalFechados = greensDia + redsDia;
+        const taxaAcerto = totalFechados > 0 ? Math.round((greensDia / totalFechados) * 100) : 0;
+        const corTaxa = taxaAcerto >= 70 ? '#a6e3a1' : (taxaAcerto >= 60 ? '#f9e2af' : '#f38ba8');
+
+        let htmlResumo = `<span style="background: rgba(166, 227, 161, 0.15); color: #a6e3a1; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(166,227,161,0.3);">🟢 ${greensDia} Greens</span><span style="background: rgba(243, 139, 168, 0.15); color: #f38ba8; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(243,139,168,0.3);">🔴 ${redsDia} Reds</span>`;
+
+        if (totalFechados > 0) {
+            htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corTaxa}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corTaxa};">📈 ${taxaAcerto}% de acerto</span>`;
+        }
+        resumoEl.innerHTML = htmlResumo;
+        
+    } catch (err) { 
+        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`; 
     }
 }
 
