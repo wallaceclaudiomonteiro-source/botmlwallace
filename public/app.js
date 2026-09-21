@@ -6,16 +6,25 @@ const detalhesJogo = document.getElementById('detalhes-jogo');
 const listaJogos = document.getElementById('lista-jogos');
 
 const chavesMercados = ['home', 'draw', 'away', 'over05', 'under05', 'over15', 'under15', 'over25', 'under25', 'over35', 'under35', 'btts_yes', 'btts_no', 'casa_over05', 'casa_over15', 'fora_over05', 'fora_over15', 'cantos_over35', 'cantos_over45', 'cantos_over55', 'cantos_over75', 'cantos_over85', 'cantos_over95', 'casa_cantos_over35', 'casa_cantos_over45', 'fora_cantos_over25', 'fora_cantos_over35', 'cartoes_over15', 'cartoes_over25', 'cartoes_over35', 'cartoes_over45', 'casa_cartoes_over15', 'casa_cartoes_over25', 'fora_cartoes_over15', 'fora_cartoes_over25'];
-const chavesMercadosFT_ParaContagem = [
-    'home', 'draw', 'away', 'over05', 'under05', 'over15', 'under15', 'over25', 'under25', 'over35', 'under35',
-    'btts_yes', 'btts_no', 'casa_over05', 'casa_over15', 'fora_over05', 'fora_over15',
-    'cantos_over15', 'cantos_over25', 'cantos_over35', 'cantos_over45', 'cantos_over55', 'cantos_over65', 'cantos_over75', 'cantos_over85', 'cantos_over95',
-    'casa_cantos_over05', 'casa_cantos_over15', 'casa_cantos_over25', 'casa_cantos_over35', 'casa_cantos_over45',
-    'fora_cantos_over05', 'fora_cantos_over15', 'fora_cantos_over25', 'fora_cantos_over35',
-    'cartoes_over05', 'cartoes_over15', 'cartoes_over25', 'cartoes_over35', 'cartoes_over45',
-    'casa_cartoes_over05', 'casa_cartoes_over15', 'casa_cartoes_over25',
-    'fora_cartoes_over05', 'fora_cartoes_over15', 'fora_cartoes_over25'
-];
+// Corte mínimo de probabilidade para uma previsão contar no resultado do dia
+const PROB_MINIMA_PREVISAO = 55;
+
+// Conta o resultado real (GREEN/RED/pendente) das previsões do FT de um jogo
+function resultadosDoJogo(mercados) {
+    let g = 0, r = 0, p = 0;
+    Object.keys(mercados).forEach(key => {
+        if (!key.startsWith('p_')) return; // só FT (HT e 2T têm prefixo ht_ / st_)
+        const merc = key.slice(2);
+        const prob = Number(mercados[key]);
+        if (isNaN(prob) || prob < PROB_MINIMA_PREVISAO) return;
+
+        const res = mercados[`res_${merc}`];
+        if (res === 'GREEN') g++;
+        else if (res === 'RED') r++;
+        else p++;
+    });
+    return { g, r, p };
+}
 // Substitua as funções iniciar() e carregarJogos() por estas:
 
 async function iniciar() {
@@ -65,23 +74,14 @@ async function carregarJogos(dataSelecionada) {
         let greensDia = 0, redsDia = 0;
 
         jogos.forEach(jogo => {
-            const m = jogo.mercados || {};
-            let gJogo = 0, rJogo = 0, pJogo = 0;
-
-            // Só conta os sinais do FT para o card inicial não ficar poluído
-            chavesMercadosFT_ParaContagem.forEach(merc => {
-                const hist = m[`hist_${merc}`];
-                if (hist && hist.status === 'ok') {
-                    const resReal = m[`res_${merc}`];
-                    if (resReal === 'GREEN') { greensDia++; gJogo++; }
-                    else if (resReal === 'RED') { redsDia++; rJogo++; }
-                    else { pJogo++; }
-                }
-            });
+            // Resultado real das previsões do dia (não usa o histórico por perfil)
+            const { g: gJogo, r: rJogo, p: pJogo } = resultadosDoJogo(jogo.mercados || {});
+            greensDia += gJogo;
+            redsDia += rJogo;
 
             let badgeSinais = (gJogo + rJogo + pJogo) > 0
-                ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Sinais FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>`
-                : `<div style="margin-top: 10px; font-size: 11px; color: #64748b; text-align: center;">Nenhum padrão encontrado no FT</div>`;
+                ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Previsões FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>`
+                : `<div style="margin-top: 10px; font-size: 11px; color: #64748b; text-align: center;">Sem previsões acima de ${PROB_MINIMA_PREVISAO}% no FT</div>`;
 
             const card = document.createElement('div');
             card.className = 'game-card';
@@ -117,7 +117,6 @@ async function carregarJogos(dataSelecionada) {
         listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`;
     }
 }
-
 function abrirLogin() { modalLogin.classList.remove('hidden'); }
 function fecharLogin() { modalLogin.classList.add('hidden'); }
 function mudarAbaLogin(aba) {
@@ -275,24 +274,22 @@ function gerarHTMLResultados(mercados) {
     let html = '';
 
     periodos.forEach(({ prefixo, titulo }) => {
-        const inicio = `${prefixo}hist_`;
         let g = 0, r = 0, p = 0, linhas = '';
 
         Object.keys(mercados).forEach(key => {
-            if (!key.startsWith(inicio)) return;
-            const hist = mercados[key];
-            if (!hist || hist.status !== 'ok') return;
+            // Pega só as chaves de probabilidade do período (p_, ht_p_, st_p_)
+            if (!key.startsWith(`${prefixo}p_`)) return;
+            const merc = key.slice(`${prefixo}p_`.length);
+            const probNum = Number(mercados[key]);
+            if (isNaN(probNum) || probNum < PROB_MINIMA_PREVISAO) return;
 
-            const merc = key.slice(inicio.length);
             const res = mercados[`${prefixo}res_${merc}`];
-            const prob = mercados[`${prefixo}p_${merc}`];
-
-            let icone = '⏳', cor = '#94a3b8';
-            if (res === 'GREEN') { icone = '🟢'; cor = '#a6e3a1'; g++; }
-            else if (res === 'RED') { icone = '🔴'; cor = '#f38ba8'; r++; }
+            let icone = '⏳', cor = '#94a3b8', texto = 'Pendente';
+            if (res === 'GREEN') { icone = '🟢'; cor = '#a6e3a1'; texto = 'GREEN'; g++; }
+            else if (res === 'RED') { icone = '🔴'; cor = '#f38ba8'; texto = 'RED'; r++; }
             else p++;
 
-            linhas += `<div class="prob-bar"><span>${nomeMercado(merc)}<small style="color:#64748b;">Prob: ${esc(prob)}%</small></span><strong style="color:${cor};">${icone} ${res || 'Pendente'}</strong></div>`;
+            linhas += `<div class="prob-bar"><span>${nomeMercado(merc)}<small style="color:#64748b;">Prob: ${esc(mercados[key])}%</small></span><strong style="color:${cor};">${icone} ${texto}</strong></div>`;
         });
 
         if (!linhas) return;
@@ -302,7 +299,7 @@ function gerarHTMLResultados(mercados) {
         </div>`;
     });
 
-    if (!html) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Nenhum sinal encontrado neste jogo.</div>`;
+    if (!html) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Nenhuma previsão acima de ${PROB_MINIMA_PREVISAO}% neste jogo.</div>`;
 
     if (isPremium) return html;
     return `<div class="locked-container">
