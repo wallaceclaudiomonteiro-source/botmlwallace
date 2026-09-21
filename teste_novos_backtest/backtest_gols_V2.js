@@ -257,13 +257,8 @@ if (require.main === module) {
     console.error('Uso: node backtest_gols_v2.js 2025-06-01 2026-09-18');
     process.exit(1);
   }
-
-  const { Client } = require('pg');
- const client = new Client({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol',
-});
+  const { criarClient } = require('../db');
+  const client = criarClient('modelo');
 
   (async () => {
     try {

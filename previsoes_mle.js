@@ -1,4 +1,4 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 const {
     poisson, dixonColesCorrection,
     otimizarModeloConjunto, projetarExpectativaGols,
@@ -6,7 +6,7 @@ const {
     otimizarModeloEscanteios, projetarExpectativaEscanteios, probOverEscanteios
 } = require('./market_model');
 
-const client = new Client({ connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol' });
+const client = criarClient('modelo');
 
 const RHO_DIXON_COLES = -0.1, MAX_GOLS_GRADE = 10, JANELA_HISTORICO = '1 year', MIN_JOGOS_TREINO = 20;
 const METRICAS_OBRIGATORIAS = ['xg', 'xgot', 'gols_marcados'];

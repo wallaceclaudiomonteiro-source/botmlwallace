@@ -1,8 +1,5 @@
-const { Client } = require('pg');
-
-const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const { criarClient } = require('./db');
+const client = criarClient('modelo');
 
 // Apenas mercados INDIVIDUAIS (Isolados por escopo CASA ou FORA)
 const MERCADOS = [

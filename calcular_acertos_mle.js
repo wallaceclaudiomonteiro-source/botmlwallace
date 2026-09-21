@@ -1,9 +1,7 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 const { poisson, dixonColesCorrection } = require('./market_model');
 
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 // Mesmo intervalo do backtest que gerou os mle_l_home / mle_l_away.
 const DATA_INICIAL = '2024-01-01';

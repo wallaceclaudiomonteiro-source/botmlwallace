@@ -1,12 +1,10 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 const {
     poisson, dixonColesCorrection,
     probOverCartoes, probOverEscanteios
 } = require('./market_model');
 
-const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 const RHO_DIXON_COLES = -0.1;
 const MAX_GOLS_GRADE = 10;

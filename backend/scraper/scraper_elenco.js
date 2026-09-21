@@ -1,8 +1,6 @@
 const puppeteer = require('puppeteer');
-const { Pool } = require('pg');
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol',
+const { criarPool } = require('../../db');
+const pool = criarPool('modelo', {
     max: 20,
     idleTimeoutMillis: 30000,
 });

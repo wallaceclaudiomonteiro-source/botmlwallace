@@ -1,8 +1,5 @@
-const { Client } = require('pg');
-
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const { criarClient } = require('./db');
+const client = criarClient('modelo');
 
 const IDS_FLAGRADOS = [
     198, 188, 1360, 1513, 163, 1185, 1443, 232, 440, 1462, 441, 667,

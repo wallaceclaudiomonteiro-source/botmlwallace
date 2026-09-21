@@ -1,17 +1,7 @@
-const { Pool } = require('pg');
+const { criarPool } = require('../../db');
 const puppeteer = require('puppeteer');
-
-// ======================================================
-// 🔗 CONEXÃO POSTGRESQL
-// ======================================================
-const pool = new Pool({
-    connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol',
-    max: 10,
-    idleTimeoutMillis: 30000
-});
-
+const pool = criarPool('modelo', { max: 10 });
 const caminhoChrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-
 // ======================================================
 // 🛠️ AUXILIARES DE TRATAMENTO
 // ======================================================
@@ -20,17 +10,17 @@ const caminhoChrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.ex
 // ======================================================
 const extrairFracao = (texto) => {
     if (!texto || texto === '0' || texto === '-') return { c: 0, t: 0, p: 0 };
-    
+
     // Ex: "43/48 (90%)"
     const matchCompleto = String(texto).match(/(\d+)\/(\d+)\s*\((\d+)%\)/);
     if (matchCompleto) {
-        return { 
-            c: parseInt(matchCompleto[1]), 
-            t: parseInt(matchCompleto[2]), 
-            p: parseInt(matchCompleto[3]) 
+        return {
+            c: parseInt(matchCompleto[1]),
+            t: parseInt(matchCompleto[2]),
+            p: parseInt(matchCompleto[3])
         };
     }
-    
+
     // Ex: "43/48" (sem percentual explícito)
     const matchSimples = String(texto).match(/(\d+)\/(\d+)/);
     if (matchSimples) {
@@ -38,11 +28,11 @@ const extrairFracao = (texto) => {
         const t = parseInt(matchSimples[2]);
         return { c, t, p: t > 0 ? Math.round((c / t) * 100) : 0 };
     }
-    
+
     // Ex: número solto tipo "5"
     const apenasNumero = String(texto).match(/^(\d+)$/);
     if (apenasNumero) return { c: parseInt(apenasNumero[1]), t: 0, p: 100 };
-    
+
     return { c: 0, t: 0, p: 0 };
 };
 
@@ -236,7 +226,7 @@ async function coletaestatisticasjogador(jogo, browser) {
             }
         } // FIM DO LOOP DAS ABAS
 
-       
+
         const limpaMinutos = (val) => val ? (parseInt(String(val).replace(/[^0-9]/g, '')) || 0) : 0;
         const pegaDecimal = (val) => parseFloat(String(val).replace(',', '.')) || 0;
         const pegaNumero = (val) => parseInt(val) || 0;

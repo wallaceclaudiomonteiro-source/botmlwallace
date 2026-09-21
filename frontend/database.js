@@ -1,9 +1,5 @@
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol',
-  connectionTimeoutMillis: 5000, // Dá timeout se não conseguir conectar em 5 segundos
-});
+const { criarPool } = require('../db');
+const pool = criarPool('modelo', { max: 10 });
 
 pool.on('connect', () => {
   console.log('Conectado ao banco PostgreSQL (stats_futebol) com sucesso!');

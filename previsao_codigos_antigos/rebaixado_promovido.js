@@ -1,11 +1,9 @@
-const { Pool } = require('pg');
+const { criarPool } = require('../../db'); // Lembre de ajustar o ../ de acordo com a pasta do arquivo
 
-const pool = new Pool({
-    user: 'postgres',
-    host: '100.114.225.110',
-    database: 'stats_futebol',
-    password: 'Wallace@22',
-    port: 5432,
+const pool = criarPool('modelo', { 
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
 
 const MAX_JOGOS_ATUAIS = 20;

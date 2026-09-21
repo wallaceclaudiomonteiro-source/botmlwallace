@@ -1,8 +1,5 @@
-const { Client } = require('pg');
-
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const { criarClient } = require('./db');
+const client = criarClient('modelo');
 
 const metricasAlvo = [
     'gols_marcados', 'gols_sofridos', 'posse_bola', 'xg', 'xga', 'xgot', 'xa', 'chances_clara', 'bolas_na_trave', 'xg_contra',

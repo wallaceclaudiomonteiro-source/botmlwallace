@@ -1,13 +1,10 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 const {
     otimizarModeloEscanteios,
     projetarExpectativaEscanteios
 } = require('./market_model');
 
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
-
+const client = criarClient('modelo');
 /*
  * ================================================================
  * MERCADOS DE PERÍODO (1º TEMPO E 2º TEMPO)
@@ -478,4 +475,4 @@ async function rodarBacktest(dataInicio, dataFim) {
     }
 }
 
-rodarBacktest('2023-01-01', '2026-09-07');
+rodarBacktest('2025-01-01', '2026-09-20');

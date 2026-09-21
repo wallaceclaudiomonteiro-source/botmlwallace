@@ -1,13 +1,11 @@
 const { pegaJogosDoDia, closeDb: closeDbGols } = require('./db_gols');
 const { analyzeTeamGolsFromFiltered } = require('../markets/team_goals');
-const { Pool } = require('pg');
+const { criarPool } = require('../../db'); // Lembre de ajustar o ../ de acordo com a pasta do arquivo
 
-const pool = new Pool({
-  user: process.env.PGUSER || 'postgres',
-  host: process.env.PGHOST || '100.114.225.110',
-  database: process.env.PGDATABASE || 'stats_futebol',
-  password: process.env.PGPASSWORD || 'Wallace@22',
-  port: Number(process.env.PGPORT || 5432),
+const pool = criarPool('modelo', { 
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
 
 function toNum(v, fallback = 0) {

@@ -1,9 +1,7 @@
-const { Pool } = require('pg');
+const { criarPool } = require('../../db');
 const puppeteer = require('puppeteer');
 
-const pool = new Pool({
-    connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol'
-});
+const pool = criarPool('modelo', { max: 20 });
 
 async function processarEmLotes() {
     console.log('🚀 Iniciando processamento focado APENAS na "NULL"...');

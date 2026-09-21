@@ -1,15 +1,9 @@
-require('dotenv').config();
-const { Pool } = require('pg');
+const { criarPool } = require('../db'); // Lembre de ajustar o ../ de acordo com a pasta do arquivo
 
-// =========================================================
-// 🔗 CONEXÃO
-// =========================================================
-const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol',
+const pool = criarPool('modelo', { 
   max: 20,
   idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
 
 // =========================================================

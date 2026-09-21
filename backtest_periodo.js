@@ -1,4 +1,4 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 
 const {
     otimizarModeloConjunto,
@@ -16,10 +16,7 @@ const MERCADOS = [
     { periodo: '2_tempo', sufixo: '2t' }
 ];
 
-const client = new Client({
-    connectionString:
-        'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 const METRICAS_OBRIGATORIAS = [
     'xg',
@@ -372,6 +369,6 @@ async function rodarBacktest(dataInicio, dataFim) {
 }
 
 rodarBacktest(
-    '2023-01-01',
-    '2026-09-07'
+    '2025-01-01',
+    '2026-09-20'
 );

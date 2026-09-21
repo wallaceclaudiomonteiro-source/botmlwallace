@@ -1,7 +1,6 @@
 require('dotenv').config();
 
-const { Pool } = require('pg');
-
+const { criarPool } = require('../db');
 // =========================================================
 // CONFIGURAÇÃO FIXA
 // =========================================================
@@ -13,23 +12,11 @@ const LOOKBACK_DAYS = 60;
 // POSTGRES
 // =========================================================
 
-const pool = new Pool(
-  process.env.DATABASE_URL
-    ? {
-        connectionString: process.env.DATABASE_URL,
-        ssl:
-          process.env.PGSSLMODE === 'require'
-            ? { rejectUnauthorized: false }
-            : undefined,
-      }
-    : {
-        host: process.env.PGHOST || process.env.DB_HOST || 'localhost',
-        port: Number(process.env.PGPORT || process.env.DB_PORT || 5432),
-        database: process.env.PGDATABASE || process.env.DB_NAME,
-        user: process.env.PGUSER || process.env.DB_USER,
-        password: process.env.PGPASSWORD || process.env.DB_PASSWORD,
-      }
-);
+const pool = criarPool('modelo', { 
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
+});
 
 // =========================================================
 // HELPERS BÁSICOS

@@ -1,12 +1,10 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 const {
     otimizarModeloPosse, classificarEstiloPosse,
     otimizarModeloEstilo, indiceEstilo
 } = require('./market_model');
 
-const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 const JANELA_HISTORICO = '1 year';
 const MIN_JOGOS_TREINO = 20;

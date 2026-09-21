@@ -1,14 +1,11 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 
 const {
     otimizarModeloConjunto,
     projetarExpectativaGols
 } = require('./market_model');
 
-const client = new Client({
-    connectionString:
-        'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('site');
 
 
 async function rodarBacktest(

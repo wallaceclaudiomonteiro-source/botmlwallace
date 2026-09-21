@@ -1,13 +1,5 @@
-const { Pool } = require('pg');
-
-const pool = new Pool({
-    user: 'postgres',
-    host: '100.114.225.110',
-    database: 'stats_futebol',
-    password: 'Wallace@22',
-    port: 5432
-});
-
+const { criarPool } = require('../db');
+const pool = criarPool('modelo', { max: 20 });
 // ============================================================
 // CONFIGURAÇÃO
 // ============================================================

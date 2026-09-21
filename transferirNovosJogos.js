@@ -1,8 +1,5 @@
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol',
-});
+const { criarPool } = require('./db');
+const pool = criarPool('modelo', { max: 20 });
 
 // A função agora recebe a data desejada no formato 'YYYY-MM-DD'
 async function transferirNovosJogosPorData(dataDoJogo) {

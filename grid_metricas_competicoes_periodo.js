@@ -1,9 +1,5 @@
-const { Client } = require('pg');
-
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
-
+const { criarClient } = require('./db');
+const client = criarClient('modelo');
 /*
  * ================================================================
  * GRID DE MÉTRICAS POR PERÍODO (1º TEMPO E 2º TEMPO)

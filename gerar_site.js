@@ -1,10 +1,7 @@
 const fs = require('fs');
-const { Pool } = require('pg');
+const { criarPool } = require('./db');
 const { execSync } = require('child_process');
-const pool = new Pool({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol',
-    max: 20
-});
+const pool = criarPool('site', { max: 20 });
 
 // =======================================================================
 // 📅 DEFINA AQUI O PERÍODO
@@ -247,7 +244,48 @@ async function varrerMercadosDaLinha(linhaBanco, prefixo, periodoStr, filtroMatc
         }
     }
 }
+// Mercados FT que ficam disponíveis de graça
+const CHAVES_GRATIS_FT = [
+    'home', 'draw', 'away', 'over05', 'under05', 'over15', 'under15', 'over25', 'under25', 'over35', 'under35'
+];
 
+function separarMercados(mercados) {
+    const gratis = {};
+    const vip = {};
+
+    Object.keys(mercados).forEach(key => {
+        // tudo que é HT (ht_) ou 2T (st_) é VIP
+        if (key.startsWith('ht_') || key.startsWith('st_')) {
+            vip[key] = mercados[key];
+            return;
+        }
+
+        // exp_* (totais esperados) fica grátis
+        if (key.startsWith('exp_')) {
+            gratis[key] = mercados[key];
+            return;
+        }
+
+        // p_ / res_ / hist_ do FT: decide pela lista de mercados grátis
+        const prefixos = ['p_', 'res_', 'hist_'];
+        const prefixo = prefixos.find(p => key.startsWith(p));
+        if (prefixo) {
+            const merc = key.slice(prefixo.length);
+            // hist_ nunca é grátis, mesmo que o mercado esteja na lista grátis
+            if (prefixo === 'hist_' || !CHAVES_GRATIS_FT.includes(merc)) {
+                vip[key] = mercados[key];
+            } else {
+                gratis[key] = mercados[key];
+            }
+            return;
+        }
+
+        // qualquer chave não reconhecida vai para VIP por segurança
+        vip[key] = mercados[key];
+    });
+
+    return { gratis, vip };
+}
 async function processarJogo(jogoFT, indice, total) {
     process.stdout.write(`\r   -> Jogo ${indice} de ${total}: ${jogoFT.nome_time_casa} x ${jogoFT.nome_time_fora}`);
 
@@ -274,7 +312,10 @@ async function processarJogo(jogoFT, indice, total) {
 
     } catch (err) { /* Ignora caso a tabela esteja vazia */ }
 
-    return {
+    // Separa em mercados grátis (público) e VIP (privado)
+    const { gratis: mercadosGratis, vip: mercadosVip } = separarMercados(mercados);
+
+    const base = {
         id: jogoFT.flashscore_id_jogo, flashscore_id_jogo: jogoFT.flashscore_id_jogo,
         id_time_casa: jogoFT.id_time_casa, id_time_fora: jogoFT.id_time_fora,
         nome_time_casa: jogoFT.nome_time_casa, nome_time_fora: jogoFT.nome_time_fora,
@@ -283,9 +324,15 @@ async function processarJogo(jogoFT, indice, total) {
         data_jogo: jogoFT.data_jogo, hora_jogo: jogoFT.hora_jogo, hora: jogoFT.hora_jogo,
         pais_liga: jogoFT.pais || jogoFT.pais_liga || jogoFT.pais_competicao || 'Desconhecido',
         nome_competicao: jogoFT.nome_competicao || 'Liga', rodada: jogoFT.rodada || '-',
-        classificacao, artilheiros, mercados
+        classificacao, artilheiros
+    };
+
+    return {
+        gratis: { ...base, mercados: mercadosGratis },
+        vip: { flashscore_id_jogo: jogoFT.flashscore_id_jogo, mercados: mercadosVip }
     };
 }
+
 function enviarParaNuvem() {
     console.log('\n🚀 Iniciando envio automático para a nuvem (GitHub + Cloudflare)...');
     try {
@@ -315,6 +362,7 @@ function enviarParaNuvem() {
         console.error('\n❌ Erro ao tentar enviar para a nuvem:', error.message);
     }
 }
+
 async function rodarGerador() {
     try {
         console.log('\n==============================================');
@@ -322,7 +370,7 @@ async function rodarGerador() {
         console.log('==============================================');
 
         await pool.query('SELECT 1');
-        
+
         // Cria a pasta de dados se não existir
         if (!fs.existsSync('./public/dados')) {
             fs.mkdirSync('./public/dados', { recursive: true });
@@ -335,7 +383,7 @@ async function rodarGerador() {
         if (fs.existsSync(arquivoDatas)) {
             try {
                 datasSalvas = JSON.parse(fs.readFileSync(arquivoDatas, 'utf-8'));
-            } catch(e) {}
+            } catch (e) { }
         }
 
         console.log(`\n🔎 Buscando jogos entre ${DATA_INICIO} e ${DATA_FIM}...`);
@@ -344,17 +392,24 @@ async function rodarGerador() {
         for (const row of resDatas.rows) {
             const data = row.data_valida.toISOString().split('T')[0];
             console.log(`\n📅 Processando o dia: ${data}`);
-            
+
             const res = await pool.query(`SELECT * FROM public.analises_jogo WHERE DATE(data_jogo) = $1 ORDER BY hora_jogo ASC NULLS LAST`, [data]);
-            
+
             let jogosDoDia = [];
             for (let i = 0; i < res.rows.length; i++) {
                 jogosDoDia.push(await processarJogo(res.rows[i], i + 1, res.rows.length));
             }
-            
-            // 1. Salva o arquivo LEVE do dia específico!
-            fs.writeFileSync(`./public/dados/${data}.json`, JSON.stringify(jogosDoDia), 'utf8');
-            
+
+            const jogosGratis = jogosDoDia.map(j => j.gratis);
+            const jogosVip = jogosDoDia.map(j => j.vip);
+
+            // 1. Salva o arquivo público (grátis) do dia
+            fs.writeFileSync(`./public/dados/${data}.json`, JSON.stringify(jogosGratis), 'utf8');
+
+            // 2. Salva o arquivo privado (VIP) do dia, fora de public/
+            if (!fs.existsSync('./privado')) fs.mkdirSync('./privado', { recursive: true });
+            fs.writeFileSync(`./privado/${data}.json`, JSON.stringify(jogosVip), 'utf8');
+
             // 2. Adiciona a data na lista do Menu se for nova
             if (!datasSalvas.includes(data)) {
                 datasSalvas.push(data);
@@ -364,7 +419,7 @@ async function rodarGerador() {
         // Ordena a lista de datas e salva para o site montar o menu
         datasSalvas.sort();
         fs.writeFileSync(arquivoDatas, JSON.stringify(datasSalvas), 'utf8');
-        
+
         // Deleta o arquivo gigante antigo para limpar espaço no seu PC e GitHub
         if (fs.existsSync('./public/dados.js')) {
             fs.unlinkSync('./public/dados.js');

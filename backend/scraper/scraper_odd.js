@@ -1,11 +1,9 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import pg from 'pg';
 import { chromium } from 'playwright';
-
-const { Pool } = pg;
-
+const require = createRequire(import.meta.url);
+const { criarPool } = require('../../db.js')
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -34,36 +32,16 @@ if (envLoadedFrom) {
   console.warn('⚠️ .env não encontrado nos caminhos esperados.');
 }
 
-function requireEnv(name) {
-  const value = process.env[name];
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error(`Variável de ambiente ausente: ${name}`);
-  }
-  return value.trim();
-}
-
 // ======================================================
 // CONFIG BANCO
 // ======================================================
-const pool = new Pool({
-  host: requireEnv('PGHOST'),
-  port: Number(process.env.PGPORT || 5432),
-  user: requireEnv('PGUSER'),
-  password: requireEnv('PGPASSWORD'),
-  database: requireEnv('PGDATABASE'),
+const pool = criarPool('modelo', { 
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
 
-console.log('✅ Configuração PG carregada');
-console.log({
-  host: process.env.PGHOST,
-  port: process.env.PGPORT,
-  user: process.env.PGUSER,
-  database: process.env.PGDATABASE,
-  hasPassword:
-    typeof process.env.PGPASSWORD === 'string' &&
-    process.env.PGPASSWORD.length > 0,
-});
-
+console.log('✅ Configuração PG carregada de forma segura via db.js');
 // ======================================================
 // PARAMETROS
 // ======================================================

@@ -1,12 +1,11 @@
-const { Client } = require('pg');
+const { criarClient } = require('../../db');const readline = require('readline');
 const puppeteer = require('puppeteer');
 
 // ======================================================
 // 🔗 POSTGRESQL
 // ======================================================
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
+ 
 
 // ======================================================
 // ⏱️ UTIL

@@ -1,4 +1,4 @@
-const { Client } = require('pg');
+const { criarClient } = require('../../db');
 const puppeteer = require('puppeteer');
 const path = require('path');
 const { spawn } = require('child_process'); // 👈 ADICIONE ESTA LINHA
@@ -7,9 +7,7 @@ const caminhoChrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.ex
 
 // ======================================================
 // 🔗 CONEXÃO COM O SEU SERVIDOR POSTGRESQL (VIA TAILSCALE)
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 
 // ======================================================

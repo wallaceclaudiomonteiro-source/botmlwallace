@@ -1,6 +1,5 @@
 const puppeteer = require('puppeteer');
-const { Client } = require('pg');
-const readline = require('readline');
+const { criarClient } = require('../../db');const readline = require('readline');
 const fs = require('fs/promises');
 const path = require('path');
 const { execFile } = require('child_process');
@@ -10,10 +9,7 @@ const execFileAsync = promisify(execFile);
 // ==========================================
 // 1. Configuração do Banco de Dados
 // ==========================================
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace@22@100.114.225.110:5432/stats_futebol'
-});
-const competicoesDoDia = new Set();
+const client = criarClient('modelo');const competicoesDoDia = new Set();
 // Função auxiliar para esperar o "Enter" no console
 const askQuestion = (query) => {
     const rl = readline.createInterface({

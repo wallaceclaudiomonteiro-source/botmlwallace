@@ -1,12 +1,10 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 const {
     otimizarModeloEscanteios,
     projetarExpectativaEscanteios
 } = require('./market_model');
 
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 async function atualizarLote(client, lote) {
     if (lote.length === 0) return;

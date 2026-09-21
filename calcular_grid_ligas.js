@@ -1,4 +1,4 @@
-const { Client } = require('pg');
+const { criarClient } = require('./db');
 
 const READY_FOR_GRID = 1;
 const GRID_PROCESSED = 10;
@@ -52,9 +52,7 @@ async function registrarErroPipeline(client, payload) {
     ]);
 }
 
-const client = new Client({
-    connectionString: 'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol'
-});
+const client = criarClient('modelo');
 
 // ======================================================
 // 1. Função para calcular os tercis (33% e 66%)

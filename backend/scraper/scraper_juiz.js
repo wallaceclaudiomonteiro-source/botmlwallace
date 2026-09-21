@@ -12,16 +12,12 @@
  * Deps:  npm i pg playwright cheerio && npx playwright install chromium
  */
 const fs = require('fs');
-const { Client } = require('pg');
+const { criarClient } = require('../../db');
 const { chromium } = require('playwright');
 const cheerio = require('cheerio');
 
 // ---------------------------------------------------------------- conexão
-const client = new Client({
-  connectionString:
-    process.env.DATABASE_URL ||
-    'postgresql://postgres:Wallace%4022@100.114.225.110:5432/stats_futebol',
-});
+const client = criarClient('modelo');
 client.on('error', (err) => console.error('[pg] conexão caiu:', err.message));
 
 // ---------------------------------------------------------------- config
