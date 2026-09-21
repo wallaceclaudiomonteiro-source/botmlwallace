@@ -7,28 +7,48 @@ const listaJogos = document.getElementById('lista-jogos');
 
 const chavesMercados = ['home', 'draw', 'away', 'over05', 'under05', 'over15', 'under15', 'over25', 'under25', 'over35', 'under35', 'btts_yes', 'btts_no', 'casa_over05', 'casa_over15', 'fora_over05', 'fora_over15', 'cantos_over35', 'cantos_over45', 'cantos_over55', 'cantos_over75', 'cantos_over85', 'cantos_over95', 'casa_cantos_over35', 'casa_cantos_over45', 'fora_cantos_over25', 'fora_cantos_over35', 'cartoes_over15', 'cartoes_over25', 'cartoes_over35', 'cartoes_over45', 'casa_cartoes_over15', 'casa_cartoes_over25', 'fora_cartoes_over15', 'fora_cartoes_over25'];
 
-function iniciar() {
-    if (typeof baseDeDados === 'undefined') return alert("Erro: O arquivo dados.js não foi carregado corretamente.");
-    const datas = Object.keys(baseDeDados).sort((a, b) => new Date(a) - new Date(b));
-    const seletor = document.getElementById('seletor-data');
-    datas.forEach(data => {
-        const option = document.createElement('option');
-        option.value = data; option.textContent = data.split('-').reverse().join('/'); 
-        seletor.appendChild(option);
-    });
-    if(datas.length > 0) {
-        seletor.value = datas[datas.length - 1];
-        seletor.addEventListener('change', (e) => carregarJogos(e.target.value));
-        carregarJogos(seletor.value);
+// Substitua as funções iniciar() e carregarJogos() por estas:
+
+async function iniciar() {
+    try {
+        // Truque Anti-Cache: Obriga o navegador a sempre baixar a lista mais nova
+        const antiCache = new Date().getTime();
+        const res = await fetch(`dados/datas_disponiveis.json?v=${antiCache}`);
+        const datas = await res.json();
+
+        const seletor = document.getElementById('seletor-data');
+        seletor.innerHTML = ''; // Limpa antes de preencher
+        
+        datas.forEach(data => {
+            const option = document.createElement('option');
+            option.value = data; 
+            option.textContent = data.split('-').reverse().join('/'); 
+            seletor.appendChild(option);
+        });
+
+        if(datas.length > 0) {
+            seletor.value = datas[datas.length - 1];
+            seletor.addEventListener('change', (e) => carregarJogos(e.target.value));
+            carregarJogos(seletor.value);
+        }
+    } catch (err) {
+        alert("Erro ao carregar a lista de datas do servidor.");
+        console.error(err);
     }
 }
 
 async function carregarJogos(dataSelecionada) {
     try {
-        if (typeof baseDeDados === 'undefined') return;
-        const jogos = baseDeDados[dataSelecionada];
+        // Mostra que está carregando enquanto baixa o arquivo levinho do dia
+        listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Carregando jogos...</p>`;
+        
+        // Baixa apenas o dia específico (Truque Anti-Cache)
+        const antiCache = new Date().getTime();
+        const res = await fetch(`dados/${dataSelecionada}.json?v=${antiCache}`);
+        const jogos = await res.json();
+
         if (!Array.isArray(jogos) || jogos.length === 0) {
-            listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Nenhum jogo encontrado.</p>`;
+            listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Nenhum jogo encontrado para esta data.</p>`;
             return;
         }
 
@@ -38,8 +58,9 @@ async function carregarJogos(dataSelecionada) {
         jogos.forEach(jogo => {
             const m = jogo.mercados || {};
             let gJogo = 0, rJogo = 0, pJogo = 0;
-            // Apenas contabilizando FT para a etiqueta do card para não sobrecarregar
-            chavesMercados.forEach(merc => {
+            
+            // Só conta os sinais do FT para o card inicial não ficar poluído
+            chavesMercadosFT_ParaContagem.forEach(merc => {
                 const hist = m[`hist_${merc}`];
                 if (hist && hist.status === 'ok') {
                     const resReal = m[`res_${merc}`];
@@ -51,7 +72,7 @@ async function carregarJogos(dataSelecionada) {
 
             let badgeSinais = (gJogo + rJogo + pJogo) > 0 
                 ? `<div style="margin-top: 10px; font-size: 11px; padding: 5px 8px; background: rgba(0,0,0,0.25); border: 1px solid #334155; border-radius: 6px; display: flex; justify-content: space-between; align-items: center;"><span style="color:#94a3b8;">🎯 Sinais FT:</span><span><strong style="color:#a6e3a1">${gJogo}G</strong> &nbsp;|&nbsp; <strong style="color:#f38ba8">${rJogo}R</strong>${pJogo > 0 ? ` &nbsp;|&nbsp; <strong style="color:#94a3b8">${pJogo}⏳</strong>` : ''}</span></div>` 
-                : `<div style="margin-top: 10px; font-size: 11px; color: #64748b; text-align: center;">Nenhum padrão encontrado</div>`;
+                : `<div style="margin-top: 10px; font-size: 11px; color: #64748b; text-align: center;">Nenhum padrão encontrado no FT</div>`;
 
             const card = document.createElement('div');
             card.className = 'game-card';
@@ -60,6 +81,9 @@ async function carregarJogos(dataSelecionada) {
             listaJogos.appendChild(card);
         });
 
+        // ==========================================
+        // PAINEL DE RESUMO DO DIA
+        // ==========================================
         let resumoEl = document.getElementById('resumo-dia-painel');
         if (!resumoEl) {
             const seletor = document.getElementById('seletor-data');
@@ -71,7 +95,10 @@ async function carregarJogos(dataSelecionada) {
         let htmlResumo = `<span style="background: rgba(166, 227, 161, 0.15); color: #a6e3a1; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(166,227,161,0.3);">🟢 ${greensDia} Greens</span><span style="background: rgba(243, 139, 168, 0.15); color: #f38ba8; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(243,139,168,0.3);">🔴 ${redsDia} Reds</span>`;
         if (pendentesDia > 0) htmlResumo += `<span style="background: rgba(148, 163, 184, 0.15); color: #94a3b8; padding: 6px 12px; border-radius: 6px; border: 1px solid rgba(148,163,184,0.3);">⏳ ${pendentesDia} Pendentes</span>`;
         resumoEl.innerHTML = htmlResumo;
-    } catch (err) { listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`; }
+        
+    } catch (err) { 
+        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`; 
+    }
 }
 
 function abrirLogin() { modalLogin.classList.remove('hidden'); }

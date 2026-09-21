@@ -318,20 +318,24 @@ function enviarParaNuvem() {
 async function rodarGerador() {
     try {
         console.log('\n==============================================');
-        console.log('   GERADOR COMPLETO: FT, HT E 2T MODO PRO');
+        console.log('   GERADOR COMPLETO: ARQUIVOS DIÁRIOS (API)');
         console.log('==============================================');
 
         await pool.query('SELECT 1');
-        if (!fs.existsSync('./public')) fs.mkdirSync('./public', { recursive: true });
+        
+        // Cria a pasta de dados se não existir
+        if (!fs.existsSync('./public/dados')) {
+            fs.mkdirSync('./public/dados', { recursive: true });
+        }
 
-        let bancoCompleto = {};
-        const arquivoDados = './public/dados.js';
+        let datasSalvas = [];
+        const arquivoDatas = './public/dados/datas_disponiveis.json';
 
-        if (fs.existsSync(arquivoDados)) {
+        // Puxa as datas que já existem para não sobreescrever a lista
+        if (fs.existsSync(arquivoDatas)) {
             try {
-                const jsonPuro = fs.readFileSync(arquivoDados, 'utf-8').replace('const baseDeDados = ', '').replace(/;$/, '');
-                bancoCompleto = JSON.parse(jsonPuro);
-            } catch (err) { bancoCompleto = {}; }
+                datasSalvas = JSON.parse(fs.readFileSync(arquivoDatas, 'utf-8'));
+            } catch(e) {}
         }
 
         console.log(`\n🔎 Buscando jogos entre ${DATA_INICIO} e ${DATA_FIM}...`);
@@ -340,22 +344,34 @@ async function rodarGerador() {
         for (const row of resDatas.rows) {
             const data = row.data_valida.toISOString().split('T')[0];
             console.log(`\n📅 Processando o dia: ${data}`);
+            
             const res = await pool.query(`SELECT * FROM public.analises_jogo WHERE DATE(data_jogo) = $1 ORDER BY hora_jogo ASC NULLS LAST`, [data]);
-            bancoCompleto[data] = [];
+            
+            let jogosDoDia = [];
             for (let i = 0; i < res.rows.length; i++) {
-                bancoCompleto[data].push(await processarJogo(res.rows[i], i + 1, res.rows.length));
+                jogosDoDia.push(await processarJogo(res.rows[i], i + 1, res.rows.length));
+            }
+            
+            // 1. Salva o arquivo LEVE do dia específico!
+            fs.writeFileSync(`./public/dados/${data}.json`, JSON.stringify(jogosDoDia), 'utf8');
+            
+            // 2. Adiciona a data na lista do Menu se for nova
+            if (!datasSalvas.includes(data)) {
+                datasSalvas.push(data);
             }
         }
-        const diasMaximos = 10;
-        const datasSalvas = Object.keys(bancoCompleto).sort();
-        if (datasSalvas.length > diasMaximos) {
-            const datasParaApagar = datasSalvas.slice(0, datasSalvas.length - diasMaximos);
-            datasParaApagar.forEach(dataVelha => delete bancoCompleto[dataVelha]);
-            console.log(`🧹 Limpeza: ${datasParaApagar.length} dias antigos removidos do arquivo estático.`);
+
+        // Ordena a lista de datas e salva para o site montar o menu
+        datasSalvas.sort();
+        fs.writeFileSync(arquivoDatas, JSON.stringify(datasSalvas), 'utf8');
+        
+        // Deleta o arquivo gigante antigo para limpar espaço no seu PC e GitHub
+        if (fs.existsSync('./public/dados.js')) {
+            fs.unlinkSync('./public/dados.js');
+            console.log('🧹 Arquivo gigante dados.js removido com sucesso!');
         }
-        console.log('\n💾 Gerando dados.js...');
-        fs.writeFileSync(arquivoDados, `const baseDeDados = ${JSON.stringify(bancoCompleto, null, 2)};`, 'utf8');
-        console.log(`✅ Concluído! O banco JSON foi gerado com sucesso.`);
+
+        console.log(`\n✅ Concluído! JSONs separados foram gerados com sucesso na pasta /dados.`);
         enviarParaNuvem();
     } catch (err) {
         console.error('\n❌ ERRO:', err);
