@@ -15,14 +15,34 @@ const caminhoChrome = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.ex
 // ======================================================
 // 🛠️ AUXILIARES DE TRATAMENTO
 // ======================================================
+// ======================================================
+// 🛠️ FUNÇÃO CORRETA DE EXTRAÇÃO DE FRAÇÕES
+// ======================================================
 const extrairFracao = (texto) => {
     if (!texto || texto === '0' || texto === '-') return { c: 0, t: 0, p: 0 };
+    
+    // Ex: "43/48 (90%)"
     const matchCompleto = String(texto).match(/(\d+)\/(\d+)\s*\((\d+)%\)/);
-    if (matchCompleto) return { c: parseInt(matchCompleto), t: parseInt(matchCompleto), p: parseInt(matchCompleto) };
+    if (matchCompleto) {
+        return { 
+            c: parseInt(matchCompleto[1]), 
+            t: parseInt(matchCompleto[2]), 
+            p: parseInt(matchCompleto[3]) 
+        };
+    }
+    
+    // Ex: "43/48" (sem percentual explícito)
     const matchSimples = String(texto).match(/(\d+)\/(\d+)/);
-    if (matchSimples) return { c: parseInt(matchSimples), t: parseInt(matchSimples), p: 0 };
+    if (matchSimples) {
+        const c = parseInt(matchSimples[1]);
+        const t = parseInt(matchSimples[2]);
+        return { c, t, p: t > 0 ? Math.round((c / t) * 100) : 0 };
+    }
+    
+    // Ex: número solto tipo "5"
     const apenasNumero = String(texto).match(/^(\d+)$/);
-    if (apenasNumero) return { c: parseInt(apenasNumero), t: parseInt(apenasNumero), p: 100 };
+    if (apenasNumero) return { c: parseInt(apenasNumero[1]), t: 0, p: 100 };
+    
     return { c: 0, t: 0, p: 0 };
 };
 
@@ -216,16 +236,7 @@ async function coletaestatisticasjogador(jogo, browser) {
             }
         } // FIM DO LOOP DAS ABAS
 
-        // ======================================================
-        // FUNÇÕES DE TRATAMENTO DE DADOS E SALVAMENTO NO BANCO
-        // ======================================================
-
-        // 🎯 AQUI: ALTERADO PARA PEGAR O TEXTO COMPLETO E JOGAR NA VARIÁVEL 'C'
-        const extrairFracao = (texto) => {
-            if (!texto || texto === '0' || texto === '-') return { c: '0', t: 0, p: 0 };
-            return { c: String(texto).trim(), t: 0, p: 0 };
-        };
-
+       
         const limpaMinutos = (val) => val ? (parseInt(String(val).replace(/[^0-9]/g, '')) || 0) : 0;
         const pegaDecimal = (val) => parseFloat(String(val).replace(',', '.')) || 0;
         const pegaNumero = (val) => parseInt(val) || 0;

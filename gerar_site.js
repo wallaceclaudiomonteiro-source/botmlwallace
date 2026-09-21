@@ -8,8 +8,8 @@ const pool = new Pool({
 
 // =======================================================================
 // 📅 DEFINA AQUI O PERÍODO
-const DATA_INICIO = '2026-09-17';
-const DATA_FIM = '2026-09-17';
+const DATA_INICIO = '2026-07-01';
+const DATA_FIM = '2026-09-20';
 
 // ⚙️ A SUA TABELA EXATA DE PRIMEIRO/SEGUNDO TEMPO
 const TABELA_TEMPOS = 'analise_jogos_ht';
@@ -296,7 +296,7 @@ function enviarParaNuvem() {
         // 2. Faz o commit com a data e hora atuais
         const dataHora = new Date().toLocaleString('pt-BR');
         console.log(` -> Salvando versão (${dataHora})...`);
-        
+
         // Verifica se há algo para commitar antes de tentar
         const status = execSync('git status --porcelain').toString();
         if (status.trim() === '') {
@@ -346,7 +346,13 @@ async function rodarGerador() {
                 bancoCompleto[data].push(await processarJogo(res.rows[i], i + 1, res.rows.length));
             }
         }
-
+        const diasMaximos = 10;
+        const datasSalvas = Object.keys(bancoCompleto).sort();
+        if (datasSalvas.length > diasMaximos) {
+            const datasParaApagar = datasSalvas.slice(0, datasSalvas.length - diasMaximos);
+            datasParaApagar.forEach(dataVelha => delete bancoCompleto[dataVelha]);
+            console.log(`🧹 Limpeza: ${datasParaApagar.length} dias antigos removidos do arquivo estático.`);
+        }
         console.log('\n💾 Gerando dados.js...');
         fs.writeFileSync(arquivoDados, `const baseDeDados = ${JSON.stringify(bancoCompleto, null, 2)};`, 'utf8');
         console.log(`✅ Concluído! O banco JSON foi gerado com sucesso.`);

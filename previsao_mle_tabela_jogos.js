@@ -129,7 +129,7 @@ async function buscarJogosParaProcessar(dataInicial) {
     const { rows } = await client.query(`
         SELECT
             flashscore_id, data_jogo, hora_jogo,
-            id_competicao, nome_competicao, pais_liga,
+            id_competicao, nome_competicao,
             id_time_casa, id_time_fora,
             nome_time_casa, nome_time_fora,
             mle_l_home, mle_l_away,
@@ -165,7 +165,6 @@ async function salvarPrevisao(jogo, lambdaHome, lambdaAway, probs, cartoes, esca
             nome_time_fora,
             id_competicao,
             nome_competicao,
-            pais_liga,
 
             total_gols_esperado,
             casa_gols_esperado,
@@ -222,14 +221,13 @@ async function salvarPrevisao(jogo, lambdaHome, lambdaAway, probs, cartoes, esca
             p_fora_cantos_over45
         ) VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9,
-            $10, $11, $12, $13,
-            $14, $15, $16,
-            $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28,
-            $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45,
-            $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58, $59
+            $10, $11, $12,
+            $13, $14, $15,
+            $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27,
+            $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44,
+            $45, $46, $47, $48, $49, $50, $51, $52, $53, $54, $55, $56, $57, $58
         )
         ON CONFLICT (flashscore_id_jogo) DO UPDATE SET
-            pais_liga = EXCLUDED.pais_liga,
             total_gols_esperado = EXCLUDED.total_gols_esperado,
             casa_gols_esperado = EXCLUDED.casa_gols_esperado,
             fora_gols_esperado = EXCLUDED.fora_gols_esperado,
@@ -293,7 +291,6 @@ async function salvarPrevisao(jogo, lambdaHome, lambdaAway, probs, cartoes, esca
         jogo.nome_time_fora,
         jogo.id_competicao,
         jogo.nome_competicao,
-        jogo.pais_liga || null,
 
         totalGolsEsperado.toFixed(2),
         lambdaHome.toFixed(2),

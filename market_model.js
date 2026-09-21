@@ -140,6 +140,10 @@ const percentual = (val) => val !== null && val !== undefined && val !== '' ? (p
 //             somando 1.0 nos dois cenários (com ou sem xGOT).
 // ============================================================================
 
+// Constantes para o Fator de Nível (Calibração final)
+const NIVEL_MIN = 0.6;
+const NIVEL_MAX = 1.6;
+
 async function otimizarModeloConjunto(
   jogosValidos,
   iteracoes = 1500,
@@ -155,17 +159,6 @@ async function otimizarModeloConjunto(
     gradienteMax = 5
   } = opcoes;
 
-  if (!Array.isArray(jogosValidos) || jogosValidos.length === 0) {
-    return {
-      ataque: {},
-      defesa: {},
-      mediaGolsCasa: Number(referenciaLiga.mediaGolsCasa) || 1.45,
-      mediaGolsFora: Number(referenciaLiga.mediaGolsFora) || 1.15,
-      convergiu: false,
-      iteracoes: 0
-    };
-  }
-
   const mediaXGCasa = Number(referenciaLiga.xg?.casa) > 0 ? Number(referenciaLiga.xg.casa) : 1.30;
   const mediaXGFora = Number(referenciaLiga.xg?.fora) > 0 ? Number(referenciaLiga.xg.fora) : 0.95;
   const mediaXGOTCasa = Number(referenciaLiga.xgot?.casa) > 0 ? Number(referenciaLiga.xgot.casa) : 1.17;
@@ -173,14 +166,21 @@ async function otimizarModeloConjunto(
   const mediaGolsCasa = Number(referenciaLiga.gols_marcados?.casa) > 0 ? Number(referenciaLiga.gols_marcados.casa) : 1.45;
   const mediaGolsFora = Number(referenciaLiga.gols_marcados?.fora) > 0 ? Number(referenciaLiga.gols_marcados.fora) : 1.15;
 
+  if (!Array.isArray(jogosValidos) || jogosValidos.length === 0) {
+    return {
+      ataque: {}, defesa: {}, referenciaLiga,
+      mediaGolsCasa, mediaGolsFora,
+      fatorNivelCasa: 1, fatorNivelFora: 1,
+      convergiu: false, iteracoes: 0
+    };
+  }
+
   const numeroValido = (valor) => {
     const n = Number(valor);
     return Number.isFinite(n) && n >= 0;
   };
 
-  const limitar = (valor, minimo, maximo) => {
-    return Math.max(minimo, Math.min(maximo, valor));
-  };
+  const limitar = (valor, minimo, maximo) => Math.max(minimo, Math.min(maximo, valor));
 
   const logRatio = (observado, esperado) => {
     if (!numeroValido(observado) || observado <= 0) return null;
@@ -188,12 +188,16 @@ async function otimizarModeloConjunto(
     return Math.log(Math.max(0.05, observado) / Math.max(0.05, esperado));
   };
 
-  const aplicarGradiente = (valor) => {
-    return limitar(valor, -gradienteMax, gradienteMax);
-  };
+  const aplicarGradiente = (valor) => limitar(valor, -gradienteMax, gradienteMax);
+  const pesoTemporal = (jogo) => (Number.isFinite(Number(jogo.peso_tempo)) ? Number(jogo.peso_tempo) : 1);
+
+  const canais = [
+    { peso: pesoXG, mediaCasa: mediaXGCasa, mediaFora: mediaXGFora, campoCasa: 'xg_casa', campoFora: 'xg_fora' },
+    { peso: pesoXGOT, mediaCasa: mediaXGOTCasa, mediaFora: mediaXGOTFora, campoCasa: 'xgot_casa', campoFora: 'xgot_fora' },
+    { peso: pesoGols, mediaCasa: mediaGolsCasa, mediaFora: mediaGolsFora, campoCasa: 'gols_marcados_casa', campoFora: 'gols_marcados_fora' }
+  ];
 
   const times = new Set();
-
   for (const jogo of jogosValidos) {
     if (jogo.casa_id !== undefined && jogo.casa_id !== null) times.add(String(jogo.casa_id));
     if (jogo.fora_id !== undefined && jogo.fora_id !== null) times.add(String(jogo.fora_id));
@@ -201,183 +205,56 @@ async function otimizarModeloConjunto(
 
   const ataque = {};
   const defesa = {};
-
-  for (const id of times) {
-    ataque[id] = 0;
-    defesa[id] = 0;
-  }
+  for (const id of times) { ataque[id] = 0; defesa[id] = 0; }
 
   let convergiu = false;
   let iteracaoFinal = 0;
 
   for (let iteracao = 0; iteracao < iteracoes; iteracao++) {
-
     const gradAtaque = {};
     const gradDefesa = {};
-
-    for (const id of times) {
-      gradAtaque[id] = 0;
-      gradDefesa[id] = 0;
-    }
+    for (const id of times) { gradAtaque[id] = 0; gradDefesa[id] = 0; }
 
     let maiorMudanca = 0;
     let observacoes = 0;
-    let erroTotal = 0;
 
     for (const jogo of jogosValidos) {
-
       const casa = String(jogo.casa_id);
       const fora = String(jogo.fora_id);
+      if (!times.has(casa) || !times.has(fora)) continue;
 
-      if (!times.has(casa) || !times.has(fora)) {
-        continue;
-      }
-
-      const pesoJogo = Number.isFinite(Number(jogo.peso_tempo)) ? Number(jogo.peso_tempo) : 1;
-
+      const pesoJogo = pesoTemporal(jogo);
       const etaCasa = limitar(ataque[casa] + defesa[fora], -5, 5);
       const etaFora = limitar(ataque[fora] + defesa[casa], -5, 5);
 
       let gradCasa = 0;
+      let gradFora = 0;
 
-      const xGCasa = Number(jogo.xg_casa);
-      const temXGCasa = numeroValido(xGCasa) && xGCasa > 0;
-
-      if (temXGCasa) {
-        const esperadoXGCasa = mediaXGCasa * Math.exp(etaCasa);
-        const erroXG = logRatio(xGCasa, esperadoXGCasa);
-        if (erroXG !== null) {
-          gradCasa += pesoJogo * pesoXG * erroXG;
-          gradDefesa[fora] += pesoJogo * pesoXG * erroXG;
-          erroTotal += Math.abs(erroXG) * pesoXG;
-          observacoes++;
-        }
-      }
-
-      const xGOTCasa = Number(jogo.xgot_casa);
-
-      if (numeroValido(xGOTCasa) && xGOTCasa > 0) {
-        const esperadoXGOTCasa = mediaXGOTCasa * Math.exp(etaCasa);
-        const erroXGOT = logRatio(xGOTCasa, esperadoXGOTCasa);
-        if (erroXGOT !== null) {
-          gradCasa += pesoJogo * pesoXGOT * erroXGOT;
-          gradDefesa[fora] += pesoJogo * pesoXGOT * erroXGOT;
-          erroTotal += Math.abs(erroXGOT) * pesoXGOT;
-          observacoes++;
-        }
-      } else {
-        //const pesoFallbackXG = 0.24;   // Fixo no valor antigo
-        //const pesoFallbackGols = 0.06; // Fixo no valor antigo
-
-        //if (temXGCasa) {
-          //const esperadoXGCasa = mediaXGCasa * Math.exp(etaCasa);
-          //const erroFallbackXG = logRatio(xGCasa, esperadoXGCasa);
-          //if (erroFallbackXG !== null) {
-            //gradCasa += pesoJogo * pesoFallbackXG * erroFallbackXG;
-            //gradDefesa[fora] += pesoJogo * pesoFallbackXG * erroFallbackXG;
-            //erroTotal += Math.abs(erroFallbackXG) * pesoFallbackXG;
-            //observacoes++;
-          //}
-        //}
-
-        //const golsCasaFallback = Number(jogo.gols_marcados_casa);
-
-        /*if (numeroValido(golsCasaFallback) && golsCasaFallback > 0) {
-          const esperadoGolsCasa = mediaGolsCasa * Math.exp(etaCasa);
-          const erroFallbackGols = logRatio(golsCasaFallback, esperadoGolsCasa);
-          if (erroFallbackGols !== null) {
-            gradCasa += pesoJogo * pesoFallbackGols * erroFallbackGols;
-            gradDefesa[fora] += pesoJogo * pesoFallbackGols * erroFallbackGols;
-            erroTotal += Math.abs(erroFallbackGols) * pesoFallbackGols;
+      for (const c of canais) {
+        const obsCasa = Number(jogo[c.campoCasa]);
+        if (numeroValido(obsCasa) && obsCasa > 0) {
+          const erro = logRatio(obsCasa, c.mediaCasa * Math.exp(etaCasa));
+          if (erro !== null) {
+            const g = pesoJogo * c.peso * erro;
+            gradCasa += g;
+            gradDefesa[fora] += g;
             observacoes++;
           }
-        }*/
-      }
+        }
 
-      const golsCasa = Number(jogo.gols_marcados_casa);
-
-      if (numeroValido(golsCasa) && golsCasa > 0) {
-        const esperadoGolsCasa = mediaGolsCasa * Math.exp(etaCasa);
-        const erroGolsCasa = logRatio(golsCasa, esperadoGolsCasa);
-        if (erroGolsCasa !== null) {
-          gradCasa += pesoJogo * pesoGols * erroGolsCasa;
-          gradDefesa[fora] += pesoJogo * pesoGols * erroGolsCasa;
-          erroTotal += Math.abs(erroGolsCasa) * pesoGols;
-          observacoes++;
+        const obsFora = Number(jogo[c.campoFora]);
+        if (numeroValido(obsFora) && obsFora > 0) {
+          const erro = logRatio(obsFora, c.mediaFora * Math.exp(etaFora));
+          if (erro !== null) {
+            const g = pesoJogo * c.peso * erro;
+            gradFora += g;
+            gradDefesa[casa] += g;
+            observacoes++;
+          }
         }
       }
 
       gradAtaque[casa] += aplicarGradiente(gradCasa);
-
-      let gradFora = 0;
-
-      const xGFora = Number(jogo.xg_fora);
-      const temXGFora = numeroValido(xGFora) && xGFora > 0;
-
-      if (temXGFora) {
-        const esperadoXGFora = mediaXGFora * Math.exp(etaFora);
-        const erroXG = logRatio(xGFora, esperadoXGFora);
-        if (erroXG !== null) {
-          gradFora += pesoJogo * pesoXG * erroXG;
-          gradDefesa[casa] += pesoJogo * pesoXG * erroXG;
-          erroTotal += Math.abs(erroXG) * pesoXG;
-          observacoes++;
-        }
-      }
-
-      const xGOTFora = Number(jogo.xgot_fora);
-
-      if (numeroValido(xGOTFora) && xGOTFora > 0) {
-        const esperadoXGOTFora = mediaXGOTFora * Math.exp(etaFora);
-        const erroXGOT = logRatio(xGOTFora, esperadoXGOTFora);
-        if (erroXGOT !== null) {
-          gradFora += pesoJogo * pesoXGOT * erroXGOT;
-          gradDefesa[casa] += pesoJogo * pesoXGOT * erroXGOT;
-          erroTotal += Math.abs(erroXGOT) * pesoXGOT;
-          observacoes++;
-        }
-      } else {
-        /*const pesoFallbackXG = 0.24;   // Fixo no valor antigo
-        const pesoFallbackGols = 0.06; // Fixo no valor antigo
-
-        if (temXGFora) {
-          const esperadoXGFora = mediaXGFora * Math.exp(etaFora);
-          const erroFallbackXG = logRatio(xGFora, esperadoXGFora);
-          if (erroFallbackXG !== null) {
-            gradFora += pesoJogo * pesoFallbackXG * erroFallbackXG;
-            gradDefesa[casa] += pesoJogo * pesoFallbackXG * erroFallbackXG;
-            erroTotal += Math.abs(erroFallbackXG) * pesoFallbackXG;
-            observacoes++;
-          }
-        }-*/
-
-       // const golsForaFallback = Number(jogo.gols_marcados_fora);
-
-        /*if (numeroValido(golsForaFallback) && golsForaFallback > 0) {
-          const esperadoGolsFora = mediaGolsFora * Math.exp(etaFora);
-          const erroFallbackGols = logRatio(golsForaFallback, esperadoGolsFora);
-          if (erroFallbackGols !== null) {
-            gradFora += pesoJogo * pesoFallbackGols * erroFallbackGols;
-            gradDefesa[casa] += pesoJogo * pesoFallbackGols * erroFallbackGols;
-            erroTotal += Math.abs(erroFallbackGols) * pesoFallbackGols;
-            observacoes++;
-          }
-        }*/
-      }
-
-      const golsFora = Number(jogo.gols_marcados_fora);
-
-      if (numeroValido(golsFora) && golsFora > 0) {
-        const esperadoGolsFora = mediaGolsFora * Math.exp(etaFora);
-        const erroGolsFora = logRatio(golsFora, esperadoGolsFora);
-        if (erroGolsFora !== null) {
-          gradFora += pesoJogo * pesoGols * erroGolsFora;
-          gradDefesa[casa] += pesoJogo * pesoGols * erroGolsFora;
-          erroTotal += Math.abs(erroGolsFora) * pesoGols;
-          observacoes++;
-        }
-      }
-
       gradAtaque[fora] += aplicarGradiente(gradFora);
     }
 
@@ -385,13 +262,14 @@ async function otimizarModeloConjunto(
       const ga = aplicarGradiente(gradAtaque[id]);
       const gd = aplicarGradiente(gradDefesa[id]);
 
-      const gradAtaqueRegularizado = ga - regularizacao * ataque[id];
-      const gradDefesaRegularizado = gd - regularizacao * defesa[id];
+      const novoAtaque = ataque[id] + taxaAprendizado * (ga - regularizacao * ataque[id]);
+      const novaDefesa = defesa[id] + taxaAprendizado * (gd - regularizacao * defesa[id]);
 
-      const novoAtaque = ataque[id] + taxaAprendizado * gradAtaqueRegularizado;
-      const novaDefesa = defesa[id] + taxaAprendizado * gradDefesaRegularizado;
-
-      maiorMudanca = Math.max(maiorMudanca, Math.abs(novoAtaque - ataque[id]), Math.abs(novaDefesa - defesa[id]));
+      maiorMudanca = Math.max(
+        maiorMudanca,
+        Math.abs(novoAtaque - ataque[id]),
+        Math.abs(novaDefesa - defesa[id])
+      );
 
       ataque[id] = limitar(novoAtaque, -3, 3);
       defesa[id] = limitar(novaDefesa, -3, 3);
@@ -416,16 +294,38 @@ async function otimizarModeloConjunto(
     }
   }
 
+  // CÁLCULO DO FATOR DE NÍVEL (Corrige a subestimativa)
+  let obsCasaTotal = 0, espCasaTotal = 0, obsForaTotal = 0, espForaTotal = 0;
+
+  for (const jogo of jogosValidos) {
+    const casa = String(jogo.casa_id);
+    const fora = String(jogo.fora_id);
+    if (!times.has(casa) || !times.has(fora)) continue;
+
+    // Pega os gols diretamente do placar, não das métricas
+    const golsCasaReal = Number(jogo.gols_casa);
+    const golsForaReal = Number(jogo.gols_fora);
+    if (!Number.isFinite(golsCasaReal) || !Number.isFinite(golsForaReal)) continue;
+
+    const pesoJogo = pesoTemporal(jogo);
+
+    espCasaTotal += pesoJogo * mediaGolsCasa * Math.exp(limitar(ataque[casa] + defesa[fora], -5, 5));
+    espForaTotal += pesoJogo * mediaGolsFora * Math.exp(limitar(ataque[fora] + defesa[casa], -5, 5));
+    obsCasaTotal += pesoJogo * golsCasaReal;
+    obsForaTotal += pesoJogo * golsForaReal;
+  }
+
+  const fatorNivelCasa = espCasaTotal > 0 ? limitar(obsCasaTotal / espCasaTotal, NIVEL_MIN, NIVEL_MAX) : 1;
+  const fatorNivelFora = espForaTotal > 0 ? limitar(obsForaTotal / espForaTotal, NIVEL_MIN, NIVEL_MAX) : 1;
+
   return {
     ataque,
     defesa,
     referenciaLiga,
     mediaGolsCasa,
     mediaGolsFora,
-    mediaXGCasa,
-    mediaXGFora,
-    mediaXGOTCasa,
-    mediaXGOTFora,
+    fatorNivelCasa,
+    fatorNivelFora,
     convergiu,
     iteracoes: iteracaoFinal
   };
@@ -437,25 +337,27 @@ function projetarExpectativaGols(parametros, timeA_id, timeB_id, jogaEmCasa = tr
 
   const ataqueA = Number(parametros.ataque?.[idA]) || 0;
   const defesaB = Number(parametros.defesa?.[idB]) || 0;
-
   const referenciaLiga = parametros.referenciaLiga || {};
 
   const base = jogaEmCasa
-    ? Number(referenciaLiga.gols_marcados?.casa)
-    : Number(referenciaLiga.gols_marcados?.fora);
+    ? Number(referenciaLiga.gols_marcados?.casa) || parametros.mediaGolsCasa
+    : Number(referenciaLiga.gols_marcados?.fora) || parametros.mediaGolsFora;
 
   if (!Number.isFinite(base) || base <= 0) {
-    throw new Error(
-      `Base de gols inválida para projeção: ${jogaEmCasa ? 'CASA' : 'FORA'} | base=${base} | referenciaLiga=${JSON.stringify(referenciaLiga.gols_marcados)}`
-    );
+    throw new Error(`Base de gols inválida para projeção: ${jogaEmCasa ? 'CASA' : 'FORA'}`);
   }
 
   const eta = ataqueA + defesaB;
   const etaLimitado = Math.max(-5, Math.min(5, eta));
-  const lambda = base * Math.exp(etaLimitado);
+
+  // Aplicação do Fator de Nível resolvendo a subestimativa geométrica
+  const fatorBruto = jogaEmCasa ? parametros.fatorNivelCasa : parametros.fatorNivelFora;
+  const fator = Number.isFinite(fatorBruto) && fatorBruto > 0 ? fatorBruto : 1;
+
+  const lambda = base * Math.exp(etaLimitado) * fator;
 
   if (!Number.isFinite(lambda) || lambda <= 0) {
-    throw new Error(`Lambda inválido: base=${base}, ataque=${ataqueA}, defesa=${defesaB}, eta=${eta}`);
+    throw new Error(`Lambda inválido: base=${base}, eta=${eta}, fator=${fator}`);
   }
 
   return Math.max(0.05, Math.min(8, lambda));
@@ -499,12 +401,10 @@ async function otimizarModeloCartoes(
 
   if (!Array.isArray(jogosValidos) || jogosValidos.length === 0) {
     return {
-      indisciplina: {},
-      provocacao: {},
-      mediaCartoesCasa: Number(referenciaLiga.cartoes?.casa) || 1.90,
-      mediaCartoesFora: Number(referenciaLiga.cartoes?.fora) || 2.30,
-      convergiu: false,
-      iteracoes: 0
+      indisciplina: {}, provocacao: {}, referenciaLiga,
+      mediaCartoesCasa: 1.90, mediaCartoesFora: 2.30,
+      fatorNivelCasa: 1, fatorNivelFora: 1,
+      convergiu: false, iteracoes: 0
     };
   }
 
@@ -515,53 +415,48 @@ async function otimizarModeloCartoes(
   const mediaIntensidadeCasa = Number(referenciaLiga.intensidade?.casa) > 0 ? Number(referenciaLiga.intensidade.casa) : 16.0;
   const mediaIntensidadeFora = Number(referenciaLiga.intensidade?.fora) > 0 ? Number(referenciaLiga.intensidade.fora) : 16.0;
 
-  const numeroValido = (valor) => {
-    const n = Number(valor);
-    return Number.isFinite(n) && n >= 0;
-  };
-
+  const numeroValido = (valor) => Number.isFinite(Number(valor)) && Number(valor) >= 0;
   const limitar = (valor, minimo, maximo) => Math.max(minimo, Math.min(maximo, valor));
-
-  const logRatio = (observado, esperado) => {
-    if (!numeroValido(observado) || observado <= 0) return null;
-    if (!Number.isFinite(esperado) || esperado <= 0) return null;
-    return Math.log(Math.max(0.05, observado) / Math.max(0.05, esperado));
+  const aplicarGradiente = (valor) => Number.isFinite(valor) ? limitar(valor, -gradienteMax, gradienteMax) : 0;
+  const pesoTemporal = (jogo) => (Number.isFinite(Number(jogo.peso_tempo)) ? Number(jogo.peso_tempo) : 1);
+  const logRatio = (obs, esp) => {
+    if (!numeroValido(obs) || obs <= 0 || !Number.isFinite(esp) || esp <= 0) return null;
+    return Math.log(Math.max(0.05, obs) / Math.max(0.05, esp));
   };
 
-  const aplicarGradiente = (valor) => {
-    if (!Number.isFinite(valor)) return 0;
-    return limitar(valor, -gradienteMax, gradienteMax);
-  };
+  const canaisIndisciplinaCasa = [
+    { campo: 'cartoes_casa', media: mediaCartoesCasa, pesoBase: pesoCartoes },
+    { campo: 'faltas_casa', media: mediaFaltasCasa, pesoBase: pesoFaltasCometidas },
+    { campo: 'intensidade_casa', media: mediaIntensidadeCasa, pesoBase: pesoIntensidade }
+  ];
 
-  const pesoTemporalDoJogo = (jogo) => {
-    const p = Number(jogo.peso_tempo);
-    return Number.isFinite(p) && p > 0 ? p : 1;
-  };
+  const canaisIndisciplinaFora = [
+    { campo: 'cartoes_fora', media: mediaCartoesFora, pesoBase: pesoCartoes },
+    { campo: 'faltas_fora', media: mediaFaltasFora, pesoBase: pesoFaltasCometidas },
+    { campo: 'intensidade_fora', media: mediaIntensidadeFora, pesoBase: pesoIntensidade }
+  ];
+
+  const canaisProvocacaoCasa = [ // O que a Casa sofre do adversário
+    { campo: 'cartoes_fora', media: mediaCartoesFora, pesoBase: pesoCartoesProvocados },
+    { campo: 'faltas_fora', media: mediaFaltasFora, pesoBase: pesoFaltasProvocadas },
+    { campo: 'intensidade_fora', media: mediaIntensidadeFora, pesoBase: pesoIntensidadeProvocada }
+  ];
+
+  const canaisProvocacaoFora = [ // O que Fora sofre do adversário
+    { campo: 'cartoes_casa', media: mediaCartoesCasa, pesoBase: pesoCartoesProvocados },
+    { campo: 'faltas_casa', media: mediaFaltasCasa, pesoBase: pesoFaltasProvocadas },
+    { campo: 'intensidade_casa', media: mediaIntensidadeCasa, pesoBase: pesoIntensidadeProvocada }
+  ];
 
   const indisciplina = {};
   const provocacao = {};
   const times = new Set();
 
   for (const jogo of jogosValidos) {
-    if (jogo.casa_id !== undefined && jogo.casa_id !== null) times.add(String(jogo.casa_id));
-    if (jogo.fora_id !== undefined && jogo.fora_id !== null) times.add(String(jogo.fora_id));
+    if (jogo.casa_id != null) times.add(String(jogo.casa_id));
+    if (jogo.fora_id != null) times.add(String(jogo.fora_id));
   }
-
-  for (const id of times) {
-    indisciplina[id] = 0;
-    provocacao[id] = 0;
-  }
-
-  const somaIndisciplina = pesoCartoes + pesoFaltasCometidas + pesoIntensidade;
-  const somaProvocacao = pesoCartoesProvocados + pesoFaltasProvocadas + pesoIntensidadeProvocada;
-
-  const pCartoes = somaIndisciplina > 0 ? pesoCartoes / somaIndisciplina : 0.55;
-  const pFaltasCometidas = somaIndisciplina > 0 ? pesoFaltasCometidas / somaIndisciplina : 0.30;
-  const pIntensidade = somaIndisciplina > 0 ? pesoIntensidade / somaIndisciplina : 0.15;
-
-  const pCartoesProvocados = somaProvocacao > 0 ? pesoCartoesProvocados / somaProvocacao : 0.55;
-  const pFaltasProvocadas = somaProvocacao > 0 ? pesoFaltasProvocadas / somaProvocacao : 0.30;
-  const pIntensidadeProvocada = somaProvocacao > 0 ? pesoIntensidadeProvocada / somaProvocacao : 0.15;
+  for (const id of times) { indisciplina[id] = 0; provocacao[id] = 0; }
 
   let convergiu = false;
   let iteracaoFinal = 0;
@@ -569,12 +464,7 @@ async function otimizarModeloCartoes(
   for (let iteracao = 0; iteracao < iteracoes; iteracao++) {
     const gradIndisciplina = {};
     const gradProvocacao = {};
-
-    for (const id of times) {
-      gradIndisciplina[id] = 0;
-      gradProvocacao[id] = 0;
-    }
-
+    for (const id of times) { gradIndisciplina[id] = 0; gradProvocacao[id] = 0; }
     let observacoes = 0;
 
     for (const jogo of jogosValidos) {
@@ -582,121 +472,55 @@ async function otimizarModeloCartoes(
       const fora = String(jogo.fora_id);
       if (!times.has(casa) || !times.has(fora)) continue;
 
-      const pesoJogo = pesoTemporalDoJogo(jogo);
+      const pJogo = pesoTemporal(jogo);
+      const etaCasa = limitar(indisciplina[casa] + provocacao[fora], -5, 5);
+      const etaFora = limitar(indisciplina[fora] + provocacao[casa], -5, 5);
+      const exp = (media, eta) => media * Math.exp(eta);
 
-      const etaCasa = indisciplina[casa] + provocacao[fora];
-      const etaFora = indisciplina[fora] + provocacao[casa];
+      const processarCanais = (listaCanais, etaTime, timeAlvo, isIndisciplina) => {
+        let somaPesosValidos = 0;
+        const validos = [];
+        
+        for (const canal of listaCanais) {
+          const obs = Number(jogo[canal.campo]);
+          if (numeroValido(obs) && obs > 0) {
+            somaPesosValidos += canal.pesoBase;
+            validos.push({ obs, media: canal.media, pesoOriginal: canal.pesoBase });
+          }
+        }
 
-      const esperadoCartoesCasa = mediaCartoesCasa * Math.exp(limitar(etaCasa, -5, 5));
-      const esperadoCartoesFora = mediaCartoesFora * Math.exp(limitar(etaFora, -5, 5));
+        let somaGradiente = 0;
+        for (const v of validos) {
+          const erro = logRatio(v.obs, exp(v.media, etaTime));
+          if (erro !== null) {
+             const pesoReajustado = somaPesosValidos > 0 ? v.pesoOriginal / somaPesosValidos : 0;
+             somaGradiente += pJogo * pesoReajustado * erro;
+             observacoes++;
+          }
+        }
+        
+        if (isIndisciplina) {
+            gradIndisciplina[timeAlvo] += aplicarGradiente(somaGradiente);
+        } else {
+            gradProvocacao[timeAlvo] += aplicarGradiente(somaGradiente);
+        }
+      };
 
-      const esperadoFaltasCasa = mediaFaltasCasa * Math.exp(limitar(etaCasa, -5, 5));
-      const esperadoFaltasFora = mediaFaltasFora * Math.exp(limitar(etaFora, -5, 5));
-
-      const esperadoIntensidadeCasa = mediaIntensidadeCasa * Math.exp(limitar(etaCasa, -5, 5));
-      const esperadoIntensidadeFora = mediaIntensidadeFora * Math.exp(limitar(etaFora, -5, 5));
-
-      const cartoesCasa = Number(jogo.cartoes_casa);
-      const cartoesFora = Number(jogo.cartoes_fora);
-      const faltasCasa = Number(jogo.faltas_casa);
-      const faltasFora = Number(jogo.faltas_fora);
-      const intensidadeCasa = Number(jogo.intensidade_casa);
-      const intensidadeFora = Number(jogo.intensidade_fora);
-
-      let gradIndisciplinaCasa = 0;
-
-      if (numeroValido(cartoesCasa) && cartoesCasa > 0) {
-        const erro = logRatio(cartoesCasa, esperadoCartoesCasa);
-        if (erro !== null) { gradIndisciplinaCasa += pesoJogo * pCartoes * erro; observacoes++; }
-      }
-
-      if (numeroValido(faltasCasa) && faltasCasa > 0) {
-        const erro = logRatio(faltasCasa, esperadoFaltasCasa);
-        if (erro !== null) { gradIndisciplinaCasa += pesoJogo * pFaltasCometidas * erro; observacoes++; }
-      }
-
-      if (numeroValido(intensidadeCasa) && intensidadeCasa > 0) {
-        const erro = logRatio(intensidadeCasa, esperadoIntensidadeCasa);
-        if (erro !== null) { gradIndisciplinaCasa += pesoJogo * pIntensidade * erro; observacoes++; }
-      }
-
-      gradIndisciplina[casa] += aplicarGradiente(gradIndisciplinaCasa);
-
-      let gradIndisciplinaFora = 0;
-
-      if (numeroValido(cartoesFora) && cartoesFora > 0) {
-        const erro = logRatio(cartoesFora, esperadoCartoesFora);
-        if (erro !== null) { gradIndisciplinaFora += pesoJogo * pCartoes * erro; observacoes++; }
-      }
-
-      if (numeroValido(faltasFora) && faltasFora > 0) {
-        const erro = logRatio(faltasFora, esperadoFaltasFora);
-        if (erro !== null) { gradIndisciplinaFora += pesoJogo * pFaltasCometidas * erro; observacoes++; }
-      }
-
-      if (numeroValido(intensidadeFora) && intensidadeFora > 0) {
-        const erro = logRatio(intensidadeFora, esperadoIntensidadeFora);
-        if (erro !== null) { gradIndisciplinaFora += pesoJogo * pIntensidade * erro; observacoes++; }
-      }
-
-      gradIndisciplina[fora] += aplicarGradiente(gradIndisciplinaFora);
-
-      let gradProvocacaoCasa = 0;
-
-      if (numeroValido(cartoesFora) && cartoesFora > 0) {
-        const erro = logRatio(cartoesFora, esperadoCartoesFora);
-        if (erro !== null) { gradProvocacaoCasa += pesoJogo * pCartoesProvocados * erro; observacoes++; }
-      }
-
-      if (numeroValido(faltasFora) && faltasFora > 0) {
-        const erro = logRatio(faltasFora, esperadoFaltasFora);
-        if (erro !== null) { gradProvocacaoCasa += pesoJogo * pFaltasProvocadas * erro; observacoes++; }
-      }
-
-      if (numeroValido(intensidadeFora) && intensidadeFora > 0) {
-        const erro = logRatio(intensidadeFora, esperadoIntensidadeFora);
-        if (erro !== null) { gradProvocacaoCasa += pesoJogo * pIntensidadeProvocada * erro; observacoes++; }
-      }
-
-      gradProvocacao[casa] += aplicarGradiente(gradProvocacaoCasa);
-
-      let gradProvocacaoFora = 0;
-
-      if (numeroValido(cartoesCasa) && cartoesCasa > 0) {
-        const erro = logRatio(cartoesCasa, esperadoCartoesCasa);
-        if (erro !== null) { gradProvocacaoFora += pesoJogo * pCartoesProvocados * erro; observacoes++; }
-      }
-
-      if (numeroValido(faltasCasa) && faltasCasa > 0) {
-        const erro = logRatio(faltasCasa, esperadoFaltasCasa);
-        if (erro !== null) { gradProvocacaoFora += pesoJogo * pFaltasProvocadas * erro; observacoes++; }
-      }
-
-      if (numeroValido(intensidadeCasa) && intensidadeCasa > 0) {
-        const erro = logRatio(intensidadeCasa, esperadoIntensidadeCasa);
-        if (erro !== null) { gradProvocacaoFora += pesoJogo * pIntensidadeProvocada * erro; observacoes++; }
-      }
-
-      gradProvocacao[fora] += aplicarGradiente(gradProvocacaoFora);
+      processarCanais(canaisIndisciplinaCasa, etaCasa, casa, true);
+      processarCanais(canaisIndisciplinaFora, etaFora, fora, true);
+      processarCanais(canaisProvocacaoCasa, etaFora, casa, false);
+      processarCanais(canaisProvocacaoFora, etaCasa, fora, false);
     }
 
     let maiorMudanca = 0;
-
     for (const id of times) {
       const gi = aplicarGradiente(gradIndisciplina[id]);
       const gp = aplicarGradiente(gradProvocacao[id]);
 
-      const gradIndisciplinaReg = gi - regularizacao * indisciplina[id];
-      const gradProvocacaoReg = gp - regularizacao * provocacao[id];
+      const novaIndisciplina = indisciplina[id] + taxaAprendizado * (gi - regularizacao * indisciplina[id]);
+      const novaProvocacao = provocacao[id] + taxaAprendizado * (gp - regularizacao * provocacao[id]);
 
-      const novaIndisciplina = indisciplina[id] + taxaAprendizado * gradIndisciplinaReg;
-      const novaProvocacao = provocacao[id] + taxaAprendizado * gradProvocacaoReg;
-
-      maiorMudanca = Math.max(
-        maiorMudanca,
-        Math.abs(novaIndisciplina - indisciplina[id]),
-        Math.abs(novaProvocacao - provocacao[id])
-      );
+      maiorMudanca = Math.max(maiorMudanca, Math.abs(novaIndisciplina - indisciplina[id]), Math.abs(novaProvocacao - provocacao[id]));
 
       indisciplina[id] = limitar(novaIndisciplina, -3, 3);
       provocacao[id] = limitar(novaProvocacao, -3, 3);
@@ -706,7 +530,6 @@ async function otimizarModeloCartoes(
       let mediaIndisciplina = 0;
       for (const id of times) mediaIndisciplina += indisciplina[id];
       mediaIndisciplina /= times.size;
-
       for (const id of times) {
         indisciplina[id] -= mediaIndisciplina;
         provocacao[id] += mediaIndisciplina;
@@ -714,12 +537,38 @@ async function otimizarModeloCartoes(
     }
 
     iteracaoFinal = iteracao + 1;
-
     if (maiorMudanca < 0.00001 && observacoes > 0) {
       convergiu = true;
       break;
     }
   }
+
+  // ====================================================================
+  // CÁLCULO DO FATOR DE NÍVEL DE CARTÕES (Corrige a subestimativa)
+  // ====================================================================
+  let obsCasaTotal = 0, espCasaTotal = 0, obsForaTotal = 0, espForaTotal = 0;
+
+  for (const jogo of jogosValidos) {
+    const casa = String(jogo.casa_id);
+    const fora = String(jogo.fora_id);
+    if (!times.has(casa) || !times.has(fora)) continue;
+
+    const cartoesCasaReal = Number(jogo.cartoes_casa);
+    const cartoesForaReal = Number(jogo.cartoes_fora);
+    
+    // Inclui zeros no placar real
+    if (!Number.isFinite(cartoesCasaReal) || !Number.isFinite(cartoesForaReal)) continue;
+
+    const pJogo = pesoTemporal(jogo);
+
+    espCasaTotal += pJogo * mediaCartoesCasa * Math.exp(limitar(indisciplina[casa] + provocacao[fora], -5, 5));
+    espForaTotal += pJogo * mediaCartoesFora * Math.exp(limitar(indisciplina[fora] + provocacao[casa], -5, 5));
+    obsCasaTotal += pJogo * cartoesCasaReal;
+    obsForaTotal += pJogo * cartoesForaReal;
+  }
+
+  const fatorNivelCasa = espCasaTotal > 0 ? limitar(obsCasaTotal / espCasaTotal, NIVEL_MIN, NIVEL_MAX) : 1;
+  const fatorNivelFora = espForaTotal > 0 ? limitar(obsForaTotal / espForaTotal, NIVEL_MIN, NIVEL_MAX) : 1;
 
   return {
     indisciplina,
@@ -731,6 +580,8 @@ async function otimizarModeloCartoes(
     mediaFaltasFora,
     mediaIntensidadeCasa,
     mediaIntensidadeFora,
+    fatorNivelCasa,
+    fatorNivelFora,
     convergiu,
     iteracoes: iteracaoFinal
   };
@@ -742,12 +593,11 @@ function projetarExpectativaCartoes(parametros, timeA_id, timeB_id, jogaEmCasa =
 
   const indisciplinaA = Number(parametros.indisciplina?.[idA]) || 0;
   const provocacaoB = Number(parametros.provocacao?.[idB]) || 0;
-
   const referenciaLiga = parametros.referenciaLiga || {};
 
   const base = jogaEmCasa
-    ? Number(referenciaLiga.cartoes?.casa) || parametros.mediaCartoesCasa
-    : Number(referenciaLiga.cartoes?.fora) || parametros.mediaCartoesFora;
+    ? Number(referenciaLiga.cartoes?.casa) || parametros.mediaCartoesCasa || 1.90
+    : Number(referenciaLiga.cartoes?.fora) || parametros.mediaCartoesFora || 2.30;
 
   if (!Number.isFinite(base) || base <= 0) {
     throw new Error(`Base de cartões inválida para projeção: ${jogaEmCasa ? 'CASA' : 'FORA'} | base=${base}`);
@@ -755,10 +605,15 @@ function projetarExpectativaCartoes(parametros, timeA_id, timeB_id, jogaEmCasa =
 
   const eta = indisciplinaA + provocacaoB;
   const etaLimitado = Math.max(-5, Math.min(5, eta));
-  const lambda = base * Math.exp(etaLimitado);
+
+  // Aplicação do Fator de Nível para corrigir a subestimativa
+  const fatorBruto = jogaEmCasa ? parametros.fatorNivelCasa : parametros.fatorNivelFora;
+  const fator = Number.isFinite(fatorBruto) && fatorBruto > 0 ? fatorBruto : 1;
+
+  const lambda = base * Math.exp(etaLimitado) * fator;
 
   if (!Number.isFinite(lambda) || lambda <= 0) {
-    throw new Error(`Lambda de cartões inválido: base=${base}, indisciplina=${indisciplinaA}, provocacao=${provocacaoB}, eta=${eta}`);
+    throw new Error(`Lambda de cartões inválido: base=${base}, indisciplina=${indisciplinaA}, provocacao=${provocacaoB}, eta=${eta}, fator=${fator}`);
   }
 
   return Math.max(0.05, Math.min(10, lambda));
@@ -792,13 +647,11 @@ async function otimizarModeloEscanteios(
 ) {
   const {
     referenciaLiga = {},
-    // Ofensiva
     pesoEscanteios = 0.6000,
     pesoCruzamentos = 0.1599,
     pesoToquesArea = 0.0979,
     pesoFinDentroArea = 0.0790,
     pesoFinBloqueadas = 0.0632,
-    // Concessão
     pesoEscanteiosConcedidos = 0.6000,
     pesoCruzamentosConcedidos = 0.1260,
     pesoToquesAreaConcedidos = 0.0771,
@@ -807,21 +660,21 @@ async function otimizarModeloEscanteios(
     pesoFinBloqueadasConcedidas = 0.0498,
     pesoDefesasGoleiro = 0.0205,
     pesoGolsEvitados = 0.0096,
-
     regularizacao = 0.02,
     gradienteMax = 5
   } = opcoes;
 
   if (!Array.isArray(jogosValidos) || jogosValidos.length === 0) {
-    return { ofensiva: {}, concessao: {}, convergiu: false, iteracoes: 0 };
+    return {
+      ofensiva: {}, concessao: {}, referenciaLiga, mediasAtaque: {}, mediasDefesa: {},
+      fatorNivelCasa: 1, fatorNivelFora: 1,
+      convergiu: false, iteracoes: 0
+    };
   }
 
-  // Função auxiliar para buscar médias no Grid de Competições
   const getMedia = (chave, local, padrao) =>
     Number(referenciaLiga[chave]?.[local]) > 0 ? Number(referenciaLiga[chave][local]) : padrao;
 
-  // 1. CRUZAMENTO NO GRID DE COMPETIÇÕES (MÉDIAS DA LIGA)
-  // Agrupados para clareza: O que é ação de ataque e o que é ação de defesa
   const mediasAtaque = {
     escanteiosCasa: getMedia('escanteios', 'casa', 5.2),
     escanteiosFora: getMedia('escanteios', 'fora', 4.4),
@@ -836,7 +689,6 @@ async function otimizarModeloEscanteios(
   };
 
   const mediasDefesa = {
-    // Estas médias representam as ações defensivas do PRÓPRIO time no local indicado
     rebatidasCasa: getMedia('rebatidas', 'casa', 18.0),
     rebatidasFora: getMedia('rebatidas', 'fora', 20.0),
     defesasGoleiroCasa: getMedia('defesas_goleiro', 'casa', 3.0),
@@ -848,11 +700,50 @@ async function otimizarModeloEscanteios(
   const numeroValido = (v) => Number.isFinite(Number(v)) && Number(v) >= 0;
   const limitar = (v, min, max) => Math.max(min, Math.min(max, v));
   const aplicarGradiente = (v) => Number.isFinite(v) ? limitar(v, -gradienteMax, gradienteMax) : 0;
-
   const logRatio = (obs, esp) => {
     if (!numeroValido(obs) || obs <= 0 || !Number.isFinite(esp) || esp <= 0) return null;
     return Math.log(Math.max(0.05, obs) / Math.max(0.05, esp));
   };
+  const pesoTemporal = (jogo) => (Number.isFinite(Number(jogo.peso_tempo)) ? Number(jogo.peso_tempo) : 1);
+
+  // Arrays de canais dinâmicos para suportar fallbacks corretos e não perder pesos.
+  const canaisOfensivaCasa = [
+    { campo: 'escanteios_casa', media: mediasAtaque.escanteiosCasa, pesoBase: pesoEscanteios },
+    { campo: 'cruzamentos_total_casa', media: mediasAtaque.cruzamentosCasa, pesoBase: pesoCruzamentos },
+    { campo: 'toques_area_adversaria_casa', media: mediasAtaque.toquesAreaCasa, pesoBase: pesoToquesArea },
+    { campo: 'finalizacoes_de_dentro_area_casa', media: mediasAtaque.finDentroAreaCasa, pesoBase: pesoFinDentroArea },
+    { campo: 'finalizacoes_bloqueadas_casa', media: mediasAtaque.finBloqueadasCasa, pesoBase: pesoFinBloqueadas }
+  ];
+
+  const canaisOfensivaFora = [
+    { campo: 'escanteios_fora', media: mediasAtaque.escanteiosFora, pesoBase: pesoEscanteios },
+    { campo: 'cruzamentos_total_fora', media: mediasAtaque.cruzamentosFora, pesoBase: pesoCruzamentos },
+    { campo: 'toques_area_adversaria_fora', media: mediasAtaque.toquesAreaFora, pesoBase: pesoToquesArea },
+    { campo: 'finalizacoes_de_dentro_area_fora', media: mediasAtaque.finDentroAreaFora, pesoBase: pesoFinDentroArea },
+    { campo: 'finalizacoes_bloqueadas_fora', media: mediasAtaque.finBloqueadasFora, pesoBase: pesoFinBloqueadas }
+  ];
+
+  const canaisConcessaoCasa = [ // Como a Casa concede (Produção do Visitante + Defesa da Casa)
+    { campo: 'escanteios_fora', media: mediasAtaque.escanteiosFora, pesoBase: pesoEscanteiosConcedidos },
+    { campo: 'cruzamentos_total_fora', media: mediasAtaque.cruzamentosFora, pesoBase: pesoCruzamentosConcedidos },
+    { campo: 'toques_area_adversaria_fora', media: mediasAtaque.toquesAreaFora, pesoBase: pesoToquesAreaConcedidos },
+    { campo: 'finalizacoes_de_dentro_area_fora', media: mediasAtaque.finDentroAreaFora, pesoBase: pesoFinDentroAreaConcedidas },
+    { campo: 'finalizacoes_bloqueadas_fora', media: mediasAtaque.finBloqueadasFora, pesoBase: pesoFinBloqueadasConcedidas },
+    { campo: 'rebatidas_casa', media: mediasDefesa.rebatidasCasa, pesoBase: pesoRebatidas },
+    { campo: 'defesas_goleiro_casa', media: mediasDefesa.defesasGoleiroCasa, pesoBase: pesoDefesasGoleiro },
+    { campo: 'gols_evitados_casa', media: mediasDefesa.golsEvitadosCasa, pesoBase: pesoGolsEvitados }
+  ];
+
+  const canaisConcessaoFora = [ // Como Fora concede (Produção da Casa + Defesa de Fora)
+    { campo: 'escanteios_casa', media: mediasAtaque.escanteiosCasa, pesoBase: pesoEscanteiosConcedidos },
+    { campo: 'cruzamentos_total_casa', media: mediasAtaque.cruzamentosCasa, pesoBase: pesoCruzamentosConcedidos },
+    { campo: 'toques_area_adversaria_casa', media: mediasAtaque.toquesAreaCasa, pesoBase: pesoToquesAreaConcedidos },
+    { campo: 'finalizacoes_de_dentro_area_casa', media: mediasAtaque.finDentroAreaCasa, pesoBase: pesoFinDentroAreaConcedidas },
+    { campo: 'finalizacoes_bloqueadas_casa', media: mediasAtaque.finBloqueadasCasa, pesoBase: pesoFinBloqueadasConcedidas },
+    { campo: 'rebatidas_fora', media: mediasDefesa.rebatidasFora, pesoBase: pesoRebatidas },
+    { campo: 'defesas_goleiro_fora', media: mediasDefesa.defesasGoleiroFora, pesoBase: pesoDefesasGoleiro },
+    { campo: 'gols_evitados_fora', media: mediasDefesa.golsEvitadosFora, pesoBase: pesoGolsEvitados }
+  ];
 
   const ofensiva = {};
   const concessao = {};
@@ -863,28 +754,6 @@ async function otimizarModeloEscanteios(
     if (jogo.fora_id != null) times.add(String(jogo.fora_id));
   }
   for (const id of times) { ofensiva[id] = 0; concessao[id] = 0; }
-
-  // Pesos normalizados
-  const somaOf = pesoEscanteios + pesoCruzamentos + pesoToquesArea + pesoFinDentroArea + pesoFinBloqueadas;
-  const pOf = {
-    esc: somaOf > 0 ? pesoEscanteios / somaOf : 0.60,
-    cru: somaOf > 0 ? pesoCruzamentos / somaOf : 0.1599,
-    toq: somaOf > 0 ? pesoToquesArea / somaOf : 0.0979,
-    fin: somaOf > 0 ? pesoFinDentroArea / somaOf : 0.0790,
-    blo: somaOf > 0 ? pesoFinBloqueadas / somaOf : 0.0632
-  };
-
-  const somaCo = pesoEscanteiosConcedidos + pesoCruzamentosConcedidos + pesoToquesAreaConcedidos + pesoFinDentroAreaConcedidas + pesoRebatidas + pesoFinBloqueadasConcedidas + pesoDefesasGoleiro + pesoGolsEvitados;
-  const pCo = {
-    esc: somaCo > 0 ? pesoEscanteiosConcedidos / somaCo : 0.60,
-    cru: somaCo > 0 ? pesoCruzamentosConcedidos / somaCo : 0.1260,
-    toq: somaCo > 0 ? pesoToquesAreaConcedidos / somaCo : 0.0771,
-    fin: somaCo > 0 ? pesoFinDentroAreaConcedidas / somaCo : 0.0623,
-    reb: somaCo > 0 ? pesoRebatidas / somaCo : 0.0547,
-    blo: somaCo > 0 ? pesoFinBloqueadasConcedidas / somaCo : 0.0498,
-    def: somaCo > 0 ? pesoDefesasGoleiro / somaCo : 0.0205,
-    gol: somaCo > 0 ? pesoGolsEvitados / somaCo : 0.0096
-  };
 
   let convergiu = false;
   let iteracaoFinal = 0;
@@ -900,77 +769,46 @@ async function otimizarModeloEscanteios(
       const fora = String(jogo.fora_id);
       if (!times.has(casa) || !times.has(fora)) continue;
 
-      const pesoJogo = (Number.isFinite(Number(jogo.peso_tempo)) && Number(jogo.peso_tempo) > 0) ? Number(jogo.peso_tempo) : 1;
+      const pJogo = pesoTemporal(jogo);
+      const etaCasa = limitar(ofensiva[casa] + concessao[fora], -5, 5);
+      const etaFora = limitar(ofensiva[fora] + concessao[casa], -5, 5);
 
-      // etaCasa = Força de Ataque da Casa + Fraqueza de Defesa de Fora
-      const etaCasa = ofensiva[casa] + concessao[fora];
-      // etaFora = Força de Ataque de Fora + Fraqueza de Defesa da Casa
-      const etaFora = ofensiva[fora] + concessao[casa];
+      const exp = (media, eta) => media * Math.exp(eta);
 
-      const exp = (media, eta) => media * Math.exp(limitar(eta, -5, 5));
-
-      let gOfCasa = 0, gOfFora = 0, gCoCasa = 0, gCoFora = 0;
-      const addGrad = (observado, mediaLg, etaObj, peso, tipo) => {
-        const obsNum = Number(observado);
-        if (numeroValido(obsNum) && obsNum > 0) {
-          const erro = logRatio(obsNum, exp(mediaLg, etaObj));
-          if (erro !== null) {
-            const variacao = pesoJogo * peso * erro;
-            if (tipo === 'OfCasa') gOfCasa += variacao;
-            if (tipo === 'OfFora') gOfFora += variacao;
-            if (tipo === 'CoCasa') gCoCasa += variacao;
-            if (tipo === 'CoFora') gCoFora += variacao;
-            observacoes++;
+      // Função de processamento dinâmico de canais (Normaliza pesos on-the-fly)
+      const processarCanais = (listaCanais, etaTime, timeAlvo, isOfensiva) => {
+        let somaPesosValidos = 0;
+        const validos = [];
+        
+        for (const canal of listaCanais) {
+          const obs = Number(jogo[canal.campo]);
+          if (numeroValido(obs) && obs > 0) {
+            somaPesosValidos += canal.pesoBase;
+            validos.push({ obs, media: canal.media, pesoOriginal: canal.pesoBase });
           }
+        }
+
+        let somaGradiente = 0;
+        for (const v of validos) {
+          const erro = logRatio(v.obs, exp(v.media, etaTime));
+          if (erro !== null) {
+             const pesoReajustado = somaPesosValidos > 0 ? v.pesoOriginal / somaPesosValidos : 0;
+             somaGradiente += pJogo * pesoReajustado * erro;
+             observacoes++;
+          }
+        }
+        
+        if (isOfensiva) {
+            gradOfensiva[timeAlvo] += aplicarGradiente(somaGradiente);
+        } else {
+            gradConcessao[timeAlvo] += aplicarGradiente(somaGradiente);
         }
       };
 
-      // --- OFENSIVA CASA (Ações de Ataque da Casa) ---
-      addGrad(jogo.escanteios_casa, mediasAtaque.escanteiosCasa, etaCasa, pOf.esc, 'OfCasa');
-      addGrad(jogo.cruzamentos_total_casa, mediasAtaque.cruzamentosCasa, etaCasa, pOf.cru, 'OfCasa');
-      addGrad(jogo.toques_area_adversaria_casa, mediasAtaque.toquesAreaCasa, etaCasa, pOf.toq, 'OfCasa');
-      addGrad(jogo.finalizacoes_de_dentro_area_casa, mediasAtaque.finDentroAreaCasa, etaCasa, pOf.fin, 'OfCasa');
-      addGrad(jogo.finalizacoes_bloqueadas_casa, mediasAtaque.finBloqueadasCasa, etaCasa, pOf.blo, 'OfCasa');
-
-      // --- OFENSIVA FORA (Ações de Ataque de Fora) ---
-      addGrad(jogo.escanteios_fora, mediasAtaque.escanteiosFora, etaFora, pOf.esc, 'OfFora');
-      addGrad(jogo.cruzamentos_total_fora, mediasAtaque.cruzamentosFora, etaFora, pOf.cru, 'OfFora');
-      addGrad(jogo.toques_area_adversaria_fora, mediasAtaque.toquesAreaFora, etaFora, pOf.toq, 'OfFora');
-      addGrad(jogo.finalizacoes_de_dentro_area_fora, mediasAtaque.finDentroAreaFora, etaFora, pOf.fin, 'OfFora');
-      addGrad(jogo.finalizacoes_bloqueadas_fora, mediasAtaque.finBloqueadasFora, etaFora, pOf.blo, 'OfFora');
-
-      // ====================================================================
-      // 2. CRUZAMENTO DA CONCESSÃO (MISTURANDO ADVERSÁRIO COM O PRÓPRIO TIME)
-      // ====================================================================
-
-      // --- CONCESSÃO CASA (Avaliando a fraqueza da defesa da CASA) ---
-      // A) O que o adversário conseguiu fazer contra a casa (Puxa da linha de FORA contra média de FORA)
-      addGrad(jogo.escanteios_fora, mediasAtaque.escanteiosFora, etaFora, pCo.esc, 'CoCasa');
-      addGrad(jogo.cruzamentos_total_fora, mediasAtaque.cruzamentosFora, etaFora, pCo.cru, 'CoCasa');
-      addGrad(jogo.toques_area_adversaria_fora, mediasAtaque.toquesAreaFora, etaFora, pCo.toq, 'CoCasa');
-      addGrad(jogo.finalizacoes_de_dentro_area_fora, mediasAtaque.finDentroAreaFora, etaFora, pCo.fin, 'CoCasa');
-      addGrad(jogo.finalizacoes_bloqueadas_fora, mediasAtaque.finBloqueadasFora, etaFora, pCo.blo, 'CoCasa');
-      // B) O que o PRÓPRIO time teve que fazer para se defender (Puxa da linha da CASA contra média da CASA)
-      addGrad(jogo.rebatidas_casa, mediasDefesa.rebatidasCasa, etaFora, pCo.reb, 'CoCasa');
-      addGrad(jogo.defesas_goleiro_casa, mediasDefesa.defesasGoleiroCasa, etaFora, pCo.def, 'CoCasa');
-      addGrad(jogo.gols_evitados_casa, mediasDefesa.golsEvitadosCasa, etaFora, pCo.gol, 'CoCasa');
-
-      // --- CONCESSÃO FORA (Avaliando a fraqueza da defesa de FORA) ---
-      // A) O que o adversário conseguiu fazer contra fora (Puxa da linha de CASA contra média de CASA)
-      addGrad(jogo.escanteios_casa, mediasAtaque.escanteiosCasa, etaCasa, pCo.esc, 'CoFora');
-      addGrad(jogo.cruzamentos_total_casa, mediasAtaque.cruzamentosCasa, etaCasa, pCo.cru, 'CoFora');
-      addGrad(jogo.toques_area_adversaria_casa, mediasAtaque.toquesAreaCasa, etaCasa, pCo.toq, 'CoFora');
-      addGrad(jogo.finalizacoes_de_dentro_area_casa, mediasAtaque.finDentroAreaCasa, etaCasa, pCo.fin, 'CoFora');
-      addGrad(jogo.finalizacoes_bloqueadas_casa, mediasAtaque.finBloqueadasCasa, etaCasa, pCo.blo, 'CoFora');
-      // B) O que o PRÓPRIO time teve que fazer para se defender (Puxa da linha de FORA contra média de FORA)
-      addGrad(jogo.rebatidas_fora, mediasDefesa.rebatidasFora, etaCasa, pCo.reb, 'CoFora');
-      addGrad(jogo.defesas_goleiro_fora, mediasDefesa.defesasGoleiroFora, etaCasa, pCo.def, 'CoFora');
-      addGrad(jogo.gols_evitados_fora, mediasDefesa.golsEvitadosFora, etaCasa, pCo.gol, 'CoFora');
-
-      gradOfensiva[casa] += aplicarGradiente(gOfCasa);
-      gradOfensiva[fora] += aplicarGradiente(gOfFora);
-      gradConcessao[casa] += aplicarGradiente(gCoCasa);
-      gradConcessao[fora] += aplicarGradiente(gCoFora);
+      processarCanais(canaisOfensivaCasa, etaCasa, casa, true);
+      processarCanais(canaisOfensivaFora, etaFora, fora, true);
+      processarCanais(canaisConcessaoCasa, etaFora, casa, false);
+      processarCanais(canaisConcessaoFora, etaCasa, fora, false);
     }
 
     let maiorMudanca = 0;
@@ -1004,12 +842,41 @@ async function otimizarModeloEscanteios(
     }
   }
 
+  // ====================================================================
+  // CÁLCULO DO FATOR DE NÍVEL DE ESCANTEIOS (Corrige a subestimativa)
+  // ====================================================================
+  let obsCasaTotal = 0, espCasaTotal = 0, obsForaTotal = 0, espForaTotal = 0;
+
+  for (const jogo of jogosValidos) {
+    const casa = String(jogo.casa_id);
+    const fora = String(jogo.fora_id);
+    if (!times.has(casa) || !times.has(fora)) continue;
+
+    const cantosCasaReal = Number(jogo.escanteios_casa);
+    const cantosForaReal = Number(jogo.escanteios_fora);
+    
+    // Agora inclui zeros no placar real!
+    if (!Number.isFinite(cantosCasaReal) || !Number.isFinite(cantosForaReal)) continue;
+
+    const pJogo = pesoTemporal(jogo);
+
+    espCasaTotal += pJogo * mediasAtaque.escanteiosCasa * Math.exp(limitar(ofensiva[casa] + concessao[fora], -5, 5));
+    espForaTotal += pJogo * mediasAtaque.escanteiosFora * Math.exp(limitar(ofensiva[fora] + concessao[casa], -5, 5));
+    obsCasaTotal += pJogo * cantosCasaReal;
+    obsForaTotal += pJogo * cantosForaReal;
+  }
+
+  const fatorNivelCasa = espCasaTotal > 0 ? limitar(obsCasaTotal / espCasaTotal, NIVEL_MIN, NIVEL_MAX) : 1;
+  const fatorNivelFora = espForaTotal > 0 ? limitar(obsForaTotal / espForaTotal, NIVEL_MIN, NIVEL_MAX) : 1;
+
   return {
     ofensiva,
     concessao,
     referenciaLiga,
     mediasAtaque,
     mediasDefesa,
+    fatorNivelCasa,
+    fatorNivelFora,
     convergiu,
     iteracoes: iteracaoFinal
   };
@@ -1021,12 +888,11 @@ function projetarExpectativaEscanteios(parametros, timeA_id, timeB_id, jogaEmCas
 
   const ofensivaA = Number(parametros.ofensiva?.[idA]) || 0;
   const concessaoB = Number(parametros.concessao?.[idB]) || 0;
-
   const referenciaLiga = parametros.referenciaLiga || {};
 
   const base = jogaEmCasa
-    ? Number(referenciaLiga.escanteios?.casa) || parametros.mediaEscanteiosCasa
-    : Number(referenciaLiga.escanteios?.fora) || parametros.mediaEscanteiosFora;
+    ? Number(referenciaLiga.escanteios?.casa) || parametros.mediasAtaque?.escanteiosCasa || 5.2
+    : Number(referenciaLiga.escanteios?.fora) || parametros.mediasAtaque?.escanteiosFora || 4.4;
 
   if (!Number.isFinite(base) || base <= 0) {
     throw new Error(`Base de escanteios inválida para projeção: ${jogaEmCasa ? 'CASA' : 'FORA'} | base=${base}`);
@@ -1034,10 +900,15 @@ function projetarExpectativaEscanteios(parametros, timeA_id, timeB_id, jogaEmCas
 
   const eta = ofensivaA + concessaoB;
   const etaLimitado = Math.max(-5, Math.min(5, eta));
-  const lambda = base * Math.exp(etaLimitado);
+
+  // Aplicação do Fator de Nível para corrigir a subestimativa
+  const fatorBruto = jogaEmCasa ? parametros.fatorNivelCasa : parametros.fatorNivelFora;
+  const fator = Number.isFinite(fatorBruto) && fatorBruto > 0 ? fatorBruto : 1;
+
+  const lambda = base * Math.exp(etaLimitado) * fator;
 
   if (!Number.isFinite(lambda) || lambda <= 0) {
-    throw new Error(`Lambda de escanteios inválido: base=${base}, ofensiva=${ofensivaA}, concessao=${concessaoB}, eta=${eta}`);
+    throw new Error(`Lambda de escanteios inválido: base=${base}, ofensiva=${ofensivaA}, concessao=${concessaoB}, eta=${eta}, fator=${fator}`);
   }
 
   return Math.max(0.5, Math.min(15, lambda));
