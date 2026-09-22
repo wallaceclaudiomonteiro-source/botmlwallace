@@ -3,13 +3,11 @@
 // ==========================================
 const SUPABASE_URL = 'https://ecefcscibdyvgozwenmf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_300B_hoFIgaNp62KWvBAcQ_MBP-E9nj';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-let usuarioLogado = null;
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY); let usuarioLogado = null;
 let perfilUsuario = null;
 
 // Fica escutando mudanças na sessão (quando o usuário loga ou desloga)
-supabase.auth.onAuthStateChange(async (event, session) => {
+supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (session) {
         usuarioLogado = session.user;
         await carregarPerfil();
@@ -168,8 +166,7 @@ async function fazerLogin() {
     const erroMsg = document.getElementById('auth-msg-erro');
 
     erroMsg.innerText = 'Entrando...';
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
-
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
     if (error) erroMsg.innerText = 'Erro: E-mail ou senha incorretos.';
 }
 
@@ -189,12 +186,12 @@ async function fazerCadastro() {
     erroMsg.innerText = 'Criando conta...';
 
     // 1. Cria o usuário na autenticação
-    const { data, error } = await supabase.auth.signUp({ email, password: senha });
+    const { data, error } = await supabaseClient.auth.signUp({ email, password: senha });
     if (error) return erroMsg.innerText = 'Erro ao criar conta: ' + error.message;
 
     // 2. Salva os dados extras na tabela 'perfis'
     if (data.user) {
-        await supabase.from('perfis').insert([{
+        await supabaseClient.from('perfis').insert([{
             id: data.user.id,
             email: email,
             nome_completo: nome,
@@ -206,14 +203,13 @@ async function fazerCadastro() {
 }
 
 async function fazerLogout() {
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     location.reload(); // Recarrega a página para limpar os dados VIP da tela
 }
 
 async function carregarPerfil() {
     if (!usuarioLogado) return;
-    const { data, error } = await supabase.from('perfis').select('*').eq('id', usuarioLogado.id).single();
-    if (data) {
+    const { data, error } = await supabaseClient.from('perfis').select('*').eq('id', usuarioLogado.id).single(); if (data) {
         perfilUsuario = data;
         console.log('Perfil carregado:', perfilUsuario);
     }
