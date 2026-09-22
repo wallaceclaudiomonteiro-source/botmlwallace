@@ -157,14 +157,38 @@ function alternarFormAuth(modo) {
     }
 }
 
-async function fazerLogin() {
-    const email = document.getElementById('email-login').value;
-    const senha = document.getElementById('senha-login').value;
-    const erroMsg = document.getElementById('auth-msg-erro');
+// Variável global para guardar os dados VIP do dia atual
+let dadosVipDoDia = [];
 
-    erroMsg.innerText = 'Entrando...';
-    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
-    if (error) erroMsg.innerText = 'Erro: E-mail ou senha incorretos.';
+async function fazerLogin() {
+    const senha = document.getElementById('input-senha').value;
+    const dataAtual = document.getElementById('seletor-data').value;
+    
+    try {
+        // Tenta baixar o arquivo VIP passando a senha escondida no cabeçalho
+        const resposta = await fetch(`/privado/${dataAtual}.json`, {
+            headers: { 'x-senha-vip': senha }
+        });
+
+        if (resposta.ok) {
+            // Acesso liberado pelo Cloudflare!
+            dadosVipDoDia = await resposta.json();
+            isPremium = true;
+            
+            document.getElementById('btn-abrir-login').style.display = 'none';
+            document.getElementById('status-logado').style.display = 'flex';
+            fecharLogin();
+            
+            alert("Acesso Premium Liberado!");
+            
+            // Se o usuário estava com algum jogo aberto, atualiza a tela para mostrar os mercados
+            if (!modalJogo.classList.contains('hidden')) fecharModalJogo();
+        } else {
+            alert("Senha incorreta ou expirada.");
+        }
+    } catch (err) {
+        alert("Erro ao conectar com o servidor VIP.");
+    }
 }
 
 async function fazerCadastro() {
@@ -406,32 +430,59 @@ function gerarHTMLResultados(mercados) {
 }
 async function abrirDetalhesJogo(jogo) {
     try {
+        // ==========================================
+        // 1. MÁGICA DA JUNÇÃO (MERGE) DOS DADOS
+        // ==========================================
+        // Pega os mercados que vieram no arquivo público/grátis
+        let mercadosCompletos = { ...(jogo.mercados || {}) };
+
+        // Se o usuário for Premium e a lista VIP foi baixada no login, junta os dados!
+        // (Certifique-se de que a variável global 'dadosVipDoDia' foi criada e preenchida no seu fazerLogin)
+        if (isPremium && typeof dadosVipDoDia !== 'undefined' && dadosVipDoDia.length > 0) {
+            const jogoVip = dadosVipDoDia.find(v => String(v.flashscore_id_jogo) === String(jogo.flashscore_id_jogo));
+            if (jogoVip && jogoVip.mercados) {
+                // Mescla os mercados VIP por cima dos mercados grátis
+                mercadosCompletos = { ...mercadosCompletos, ...jogoVip.mercados };
+            }
+        }
+
+        // ==========================================
+        // 2. GERAÇÃO DOS BLOCOS HTML DOS TEMPOS
+        // ==========================================
         const classCasa = jogo.classificacao?.casa || {};
         const classFora = jogo.classificacao?.fora || {};
+        
+        // Gerando o HTML de cada Aba de Tempo PASSANDO OS MERCADOS COMPLETOS (Grátis + VIP)
+        const htmlFT = gerarHTMLMercados(mercadosCompletos, '');
+        const htmlHT = gerarHTMLMercados(mercadosCompletos, 'ht_');
+        const htmlST = gerarHTMLMercados(mercadosCompletos, 'st_');
 
-        // Gerando o HTML de cada Aba de Tempo
-        const htmlFT = gerarHTMLMercados(jogo.mercados || {}, '');
-        const htmlHT = gerarHTMLMercados(jogo.mercados || {}, 'ht_');
-        const htmlST = gerarHTMLMercados(jogo.mercados || {}, 'st_');
-
-        // TABELA CLASSIFICAÇÃO
+        // ==========================================
+        // 3. TABELAS DE CLASSIFICAÇÃO E ARTILHEIROS
+        // ==========================================
         let linhasTabela = '';
         if (jogo.classificacao?.tabela?.GERAL?.length > 0) {
             jogo.classificacao.tabela.GERAL.forEach(time => {
                 let d = (String(time.id_time) === String(jogo.id_time_casa) || String(time.flashscore_id_time) === String(jogo.id_time_casa)) ? 'highlight-casa' : ((String(time.id_time) === String(jogo.id_time_fora) || String(time.flashscore_id_time) === String(jogo.id_time_fora)) ? 'highlight-fora' : '');
                 linhasTabela += `<tr class="${d}"><td>${time.posicao}º</td><td class="text-left">${time.nome_time}</td><td><strong>${time.pontos}</strong></td><td>${time.jogos}</td><td>${time.vitorias}</td><td>${time.empates}</td><td>${time.derrotas}</td></tr>`;
             });
-        } else linhasTabela = `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:15px;">Tabela indisponível.</td></tr>`;
+        } else {
+            linhasTabela = `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:15px;">Tabela indisponível.</td></tr>`;
+        }
 
-        // TABELA ARTILHEIROS
         let htmlArtilheiros = '';
         if (jogo.artilheiros?.length > 0) {
             jogo.artilheiros.forEach(art => {
                 let d = (String(art.id_time) === String(jogo.id_time_casa) || String(art.flashscore_id_time) === String(jogo.id_time_casa)) ? 'highlight-casa' : ((String(art.id_time) === String(jogo.id_time_fora) || String(art.flashscore_id_time) === String(jogo.id_time_fora)) ? 'highlight-fora' : '');
                 htmlArtilheiros += `<tr class="${d}"><td>${art.posicao}º</td><td class="text-left"><strong>${art.nome_jogador}</strong><br><small style="color:#94a3b8;">${art.nome_time}</small></td><td><strong>${art.gols}</strong></td><td>${art.assistencias || 0}</td></tr>`;
             });
-        } else htmlArtilheiros = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:15px;">Nenhum artilheiro registrado.</td></tr>`;
+        } else {
+            htmlArtilheiros = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:15px;">Nenhum artilheiro registrado.</td></tr>`;
+        }
 
+        // ==========================================
+        // 4. INSERÇÃO NA TELA
+        // ==========================================
         detalhesJogo.innerHTML = `
             <h2>${jogo.casa || '-'} x ${jogo.fora || '-'}</h2>
             <p><small>${jogo.pais_liga || jogo.pais || 'Liga'} - ${jogo.nome_competicao || 'Liga'} | ⏰ ${jogo.hora || 'N/A'}</small></p>
@@ -440,8 +491,7 @@ async function abrirDetalhesJogo(jogo) {
                 <button id="btn-tab-mercados" class="tab-btn active" onclick="mudarAbaPrincipal('mercados')">📊 Mercados</button>
                 <button id="btn-tab-classificacao" class="tab-btn" onclick="mudarAbaPrincipal('classificacao')">🏆 Classificação</button>
                 <button id="btn-tab-artilheiros" class="tab-btn" onclick="mudarAbaPrincipal('artilheiros')">⚽ Artilheiros</button>
-                <button id="btn-tab-resultados" class="tab-btn" onclick="mudarAbaPrincipal('resultados')">✅ Resultados</button>
-             </div>
+            </div>
 
             <div id="aba-mercados">
                 <div class="market-group" style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 15px;">
@@ -474,22 +524,21 @@ async function abrirDetalhesJogo(jogo) {
             <div id="aba-artilheiros" style="display: none;">
                 <table class="tabela-class"><thead><tr><th width="10%">#</th><th class="text-left" width="60%">Jogador</th><th width="15%">Gols</th><th width="15%">Ast</th></tr></thead><tbody>${htmlArtilheiros}</tbody></table>
             </div>
-           
-            <div id="aba-resultados" style="display: none;">
-             ${gerarHTMLResultados(jogo.mercados || {})}
-            </div>
         `;
 
         modalJogo.classList.remove('hidden');
 
-        window.mudarAbaPrincipal = function (aba) {
-            ['mercados', 'classificacao', 'artilheiros', 'resultados'].forEach(a => {
-                document.getElementById(`aba-${a}`).style.display = a === aba ? 'block' : 'none';
-                document.getElementById(`btn-tab-${a}`).classList.toggle('active', a === aba);
-            });
+        window.mudarAbaPrincipal = function(aba) {
+            document.getElementById('aba-mercados').style.display = aba === 'mercados' ? 'block' : 'none';
+            document.getElementById('aba-classificacao').style.display = aba === 'classificacao' ? 'block' : 'none';
+            document.getElementById('aba-artilheiros').style.display = aba === 'artilheiros' ? 'block' : 'none';
+            
+            document.getElementById('btn-tab-mercados').classList.toggle('active', aba === 'mercados');
+            document.getElementById('btn-tab-classificacao').classList.toggle('active', aba === 'classificacao');
+            document.getElementById('btn-tab-artilheiros').classList.toggle('active', aba === 'artilheiros');
         };
 
-        window.mudarTempo = function (tempo) {
+        window.mudarTempo = function(tempo) {
             ['ft', 'ht', 'st'].forEach(t => {
                 document.getElementById(`mercados-${t}`).style.display = t === tempo ? 'block' : 'none';
                 const btn = document.getElementById(`btn-tempo-${t}`);
@@ -501,6 +550,9 @@ async function abrirDetalhesJogo(jogo) {
             });
         };
 
-    } catch (err) { alert("Erro ao carregar detalhes."); }
+    } catch (err) { 
+        console.error("Erro ao carregar detalhes:", err);
+        alert("Erro ao carregar detalhes. Verifique o console."); 
+    }
 }
 window.onload = iniciar;

@@ -405,10 +405,10 @@ async function rodarGerador() {
 
             // 1. Salva o arquivo público (grátis) do dia
             fs.writeFileSync(`./public/dados/${data}.json`, JSON.stringify(jogosGratis), 'utf8');
-
-            // 2. Salva o arquivo privado (VIP) do dia, fora de public/
-            if (!fs.existsSync('./privado')) fs.mkdirSync('./privado', { recursive: true });
-            fs.writeFileSync(`./privado/${data}.json`, JSON.stringify(jogosVip), 'utf8');
+            
+            // 2. Salva o arquivo privado (VIP) na pasta privado/ (agora dentro de public)
+            if (!fs.existsSync('./public/privado')) fs.mkdirSync('./public/privado', { recursive: true });
+            fs.writeFileSync(`./public/privado/${data}.json`, JSON.stringify(jogosVip), 'utf8');
 
             // 2. Adiciona a data na lista do Menu se for nova
             if (!datasSalvas.includes(data)) {
