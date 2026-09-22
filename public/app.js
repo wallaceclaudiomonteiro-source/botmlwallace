@@ -1,166 +1,42 @@
 // ==========================================
-// 1. CONFIGURAÇÃO DO SUPABASE
+// CONFIGURAÇÃO DO SUPABASE
 // ==========================================
-// Corrigido: Removido o /rest/v1/ do final do URL
-const SUPABASE_URL = 'https://ecefcscibdyvgozwenmf.supabase.co';
+const SUPABASE_URL = 'https://ecefcscibdyvgozwenmf.supabase.co/rest/v1/';
 const SUPABASE_KEY = 'sb_publishable_300B_hoFIgaNp62KWvBAcQ_MBP-E9nj';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let usuarioLogado = null;
 let perfilUsuario = null;
-let isPremium = false;
 
-// Elementos DOM
-const modalJogo = document.getElementById('modal-jogo');
-const detalhesJogo = document.getElementById('detalhes-jogo');
-const listaJogos = document.getElementById('lista-jogos');
-const PROB_MINIMA_PREVISAO = 55;
-
-// ==========================================
-// 2. MONITOR DE SESSÃO DO UTILIZADOR
-// ==========================================
+// Fica escutando mudanças na sessão (quando o usuário loga ou desloga)
 supabase.auth.onAuthStateChange(async (event, session) => {
     if (session) {
         usuarioLogado = session.user;
         await carregarPerfil();
-        isPremium = perfilUsuario && (perfilUsuario.status === 'vip' || perfilUsuario.status === 'teste');
-        fecharModalAuth();
-        atualizarInterfaceUsuario(true);
-        
-        // Recarrega os jogos se já houver uma data selecionada
-        const seletor = document.getElementById('seletor-data');
-        if (seletor && seletor.value) carregarJogos(seletor.value);
+        document.getElementById('modal-auth').style.display = 'none';
+        // Aqui você chamará a função que recarrega os jogos mostrando os dados VIP
     } else {
         usuarioLogado = null;
         perfilUsuario = null;
-        isPremium = false;
-        atualizarInterfaceUsuario(false);
-        // Limpa os dados VIP do ecrã se o utilizador sair da conta
-        if (event === 'SIGNED_OUT') location.reload();
+        // Aqui o site deve voltar a bloquear os campos VIP
     }
 });
+let isPremium = false;
 
-// ==========================================
-// 3. FUNÇÕES DE AUTENTICAÇÃO E PERFIL
-// ==========================================
-async function carregarPerfil() {
-    if (!usuarioLogado) return;
-    const { data, error } = await supabase.from('perfis').select('*').eq('id', usuarioLogado.id).single();
-    if (data) perfilUsuario = data;
-}
+const modalJogo = document.getElementById('modal-jogo');
+const modalLogin = document.getElementById('modal-login');
+const detalhesJogo = document.getElementById('detalhes-jogo');
+const listaJogos = document.getElementById('lista-jogos');
 
-async function fazerLogin() {
-    const email = document.getElementById('email-login').value;
-    const senha = document.getElementById('senha-login').value;
-    const erroMsg = document.getElementById('auth-msg-erro');
+const chavesMercados = ['home', 'draw', 'away', 'over05', 'under05', 'over15', 'under15', 'over25', 'under25', 'over35', 'under35', 'btts_yes', 'btts_no', 'casa_over05', 'casa_over15', 'fora_over05', 'fora_over15', 'cantos_over35', 'cantos_over45', 'cantos_over55', 'cantos_over75', 'cantos_over85', 'cantos_over95', 'casa_cantos_over35', 'casa_cantos_over45', 'fora_cantos_over25', 'fora_cantos_over35', 'cartoes_over15', 'cartoes_over25', 'cartoes_over35', 'cartoes_over45', 'casa_cartoes_over15', 'casa_cartoes_over25', 'fora_cartoes_over15', 'fora_cartoes_over25'];
+// Corte mínimo de probabilidade para uma previsão contar no resultado do dia
+const PROB_MINIMA_PREVISAO = 55;
 
-    if (!email || !senha) return erroMsg.innerText = 'Preencha todos os campos.';
-
-    erroMsg.innerText = 'A iniciar sessão...';
-    erroMsg.style.color = 'white';
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
-    if (error) {
-        erroMsg.style.color = '#ff4444';
-        erroMsg.innerText = 'Erro: E-mail ou senha incorretos.';
-    }
-}
-
-async function fazerCadastro() {
-    const nome = document.getElementById('nome-cad').value;
-    const email = document.getElementById('email-cad').value;
-    const senha = document.getElementById('senha-cad').value;
-    const nasc = document.getElementById('nasc-cad').value;
-    const time = document.getElementById('time-cad').value;
-    const erroMsg = document.getElementById('auth-msg-erro');
-    
-    erroMsg.style.color = '#ff4444';
-
-    if (!nome || !email || !senha || !nasc) return erroMsg.innerText = 'Preencha os campos obrigatórios.';
-
-    const idade = new Date().getFullYear() - new Date(nasc).getFullYear();
-    if (idade < 18) return erroMsg.innerText = 'É necessário ter 18 anos ou mais.';
-
-    erroMsg.style.color = 'white';
-    erroMsg.innerText = 'A criar conta...';
-    
-    const { data, error } = await supabase.auth.signUp({ email, password: senha });
-    if (error) return erroMsg.innerText = 'Erro: ' + error.message;
-
-    if (data.user) {
-        await supabase.from('perfis').insert([{
-            id: data.user.id,
-            email: email,
-            nome_completo: nome,
-            data_nascimento: nasc,
-            time_coracao: time,
-            status: 'teste'
-        }]);
-    }
-}
-
-async function fazerLogout() {
-    await supabase.auth.signOut();
-}
-
-// ==========================================
-// 4. FUNÇÕES DE INTERFACE (UI) DO LOGIN
-// ==========================================
-function atualizarInterfaceUsuario(logado) {
-    const btnLogin = document.getElementById('btn-abrir-login');
-    const infoUsuario = document.getElementById('info-usuario');
-    const nomeLogado = document.getElementById('nome-usuario-logado');
-    const badgeVip = document.getElementById('status-vip-badge');
-    
-    if (logado && perfilUsuario) {
-        if (btnLogin) btnLogin.style.display = 'none';
-        if (infoUsuario) infoUsuario.style.display = 'flex';
-        if (nomeLogado) {
-            const primeiroNome = perfilUsuario.nome_completo ? perfilUsuario.nome_completo.split(' ')[0] : 'VIP';
-            nomeLogado.innerText = `Olá, ${primeiroNome}`;
-        }
-        if (badgeVip) badgeVip.innerText = String(perfilUsuario.status).toUpperCase();
-    } else {
-        if (btnLogin) btnLogin.style.display = 'block';
-        if (infoUsuario) infoUsuario.style.display = 'none';
-    }
-}
-
-function abrirModalAuth() {
-    const modal = document.getElementById('modal-auth');
-    if (modal) {
-        modal.style.display = 'flex';
-        alternarFormAuth('login');
-    }
-}
-
-function fecharModalAuth() {
-    const modal = document.getElementById('modal-auth');
-    if (modal) modal.style.display = 'none';
-    const erroMsg = document.getElementById('auth-msg-erro');
-    if (erroMsg) erroMsg.innerText = '';
-}
-
-function alternarFormAuth(modo) {
-    document.getElementById('auth-msg-erro').innerText = '';
-    if (modo === 'cadastro') {
-        document.getElementById('form-login').style.display = 'none';
-        document.getElementById('form-cadastro').style.display = 'flex';
-        document.getElementById('auth-titulo').innerText = 'Criar Conta';
-    } else {
-        document.getElementById('form-cadastro').style.display = 'none';
-        document.getElementById('form-login').style.display = 'flex';
-        document.getElementById('auth-titulo').innerText = 'Entrar no VIP';
-    }
-}
-
-// ==========================================
-// 5. LÓGICA PRINCIPAL DO SITE (JOGOS E ODDS)
-// ==========================================
+// Conta o resultado real (GREEN/RED/pendente) das previsões do FT de um jogo
 function resultadosDoJogo(mercados) {
     let g = 0, r = 0, p = 0;
     Object.keys(mercados).forEach(key => {
-        if (!key.startsWith('p_')) return; 
+        if (!key.startsWith('p_')) return; // só FT (HT e 2T têm prefixo ht_ / st_)
         const merc = key.slice(2);
         const prob = Number(mercados[key]);
         if (isNaN(prob) || prob < PROB_MINIMA_PREVISAO) return;
@@ -172,18 +48,18 @@ function resultadosDoJogo(mercados) {
     });
     return { g, r, p };
 }
+// Substitua as funções iniciar() e carregarJogos() por estas:
 
 async function iniciar() {
     try {
+        // Truque Anti-Cache: Obriga o navegador a sempre baixar a lista mais nova
         const antiCache = new Date().getTime();
         const res = await fetch(`dados/datas_disponiveis.json?v=${antiCache}`);
-        if (!res.ok) throw new Error("Ficheiro de datas não encontrado");
         const datas = await res.json();
 
         const seletor = document.getElementById('seletor-data');
-        if (!seletor) return;
-        
-        seletor.innerHTML = ''; 
+        seletor.innerHTML = ''; // Limpa antes de preencher
+
         datas.forEach(data => {
             const option = document.createElement('option');
             option.value = data;
@@ -197,14 +73,17 @@ async function iniciar() {
             carregarJogos(seletor.value);
         }
     } catch (err) {
-        if (listaJogos) listaJogos.innerHTML = `<p style="text-align:center;color:#f87171;">Aguardando geração de dados...</p>`;
+        alert("Erro ao carregar a lista de datas do servidor.");
+        console.error(err);
     }
 }
 
 async function carregarJogos(dataSelecionada) {
     try {
-        listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">A carregar jogos...</p>`;
+        // Mostra que está carregando enquanto baixa o arquivo levinho do dia
+        listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Carregando jogos...</p>`;
 
+        // Baixa apenas o dia específico (Truque Anti-Cache)
         const antiCache = new Date().getTime();
         const res = await fetch(`dados/${dataSelecionada}.json?v=${antiCache}`);
         const jogos = await res.json();
@@ -218,6 +97,7 @@ async function carregarJogos(dataSelecionada) {
         let greensDia = 0, redsDia = 0;
 
         jogos.forEach(jogo => {
+            // Resultado real das previsões do dia (não usa o histórico por perfil)
             const { g: gJogo, r: rJogo, p: pJogo } = resultadosDoJogo(jogo.mercados || {});
             greensDia += gJogo;
             redsDia += rJogo;
@@ -233,7 +113,9 @@ async function carregarJogos(dataSelecionada) {
             listaJogos.appendChild(card);
         });
 
-        // Painel de Resumo do Dia
+        // ==========================================
+        // PAINEL DE RESUMO DO DIA
+        // ==========================================
         let resumoEl = document.getElementById('resumo-dia-painel');
         if (!resumoEl) {
             const seletor = document.getElementById('seletor-data');
@@ -255,41 +137,97 @@ async function carregarJogos(dataSelecionada) {
         resumoEl.innerHTML = htmlResumo;
 
     } catch (err) {
-        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro ao carregar dados.</p>`;
+        listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`;
+    }
+}
+function abrirLogin() { modalLogin.classList.remove('hidden'); }
+function fecharLogin() { modalLogin.classList.add('hidden'); }
+function mudarAbaLogin(aba) {
+    document.getElementById('area-entrar').style.display = aba === 'entrar' ? 'block' : 'none';
+    document.getElementById('area-criar').style.display = aba === 'criar' ? 'block' : 'none';
+    document.getElementById('tab-entrar').classList.toggle('active', aba === 'entrar');
+    document.getElementById('tab-criar').classList.toggle('active', aba === 'criar');
+}
+
+function alternarFormAuth(modo) {
+    document.getElementById('auth-msg-erro').innerText = '';
+    if (modo === 'cadastro') {
+        document.getElementById('form-login').style.display = 'none';
+        document.getElementById('form-cadastro').style.display = 'block';
+        document.getElementById('auth-titulo').innerText = 'Criar Conta';
+    } else {
+        document.getElementById('form-cadastro').style.display = 'none';
+        document.getElementById('form-login').style.display = 'block';
+        document.getElementById('auth-titulo').innerText = 'Entrar no VIP';
     }
 }
 
-function fecharModalJogo() { 
-    if(modalJogo) modalJogo.classList.add('hidden'); 
+async function fazerLogin() {
+    const email = document.getElementById('email-login').value;
+    const senha = document.getElementById('senha-login').value;
+    const erroMsg = document.getElementById('auth-msg-erro');
+
+    erroMsg.innerText = 'Entrando...';
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+
+    if (error) erroMsg.innerText = 'Erro: E-mail ou senha incorretos.';
 }
 
-const esc = valor => valor === null || valor === undefined || valor === '' ? 'N/A' : valor;
+async function fazerCadastro() {
+    const nome = document.getElementById('nome-cad').value;
+    const email = document.getElementById('email-cad').value;
+    const senha = document.getElementById('senha-cad').value;
+    const nasc = document.getElementById('nasc-cad').value;
+    const time = document.getElementById('time-cad').value;
+    const erroMsg = document.getElementById('auth-msg-erro');
 
+    // Validação de Idade (+18)
+    if (!nasc) return erroMsg.innerText = 'Preencha a data de nascimento.';
+    const idade = new Date().getFullYear() - new Date(nasc).getFullYear();
+    if (idade < 18) return erroMsg.innerText = 'Você precisa ter 18 anos ou mais para se cadastrar.';
+
+    erroMsg.innerText = 'Criando conta...';
+
+    // 1. Cria o usuário na autenticação
+    const { data, error } = await supabase.auth.signUp({ email, password: senha });
+    if (error) return erroMsg.innerText = 'Erro ao criar conta: ' + error.message;
+
+    // 2. Salva os dados extras na tabela 'perfis'
+    if (data.user) {
+        await supabase.from('perfis').insert([{
+            id: data.user.id,
+            email: email,
+            nome_completo: nome,
+            data_nascimento: nasc,
+            time_coracao: time,
+            status: 'teste' // Começa com o teste de 3 dias
+        }]);
+    }
+}
+
+async function fazerLogout() {
+    await supabase.auth.signOut();
+    location.reload(); // Recarrega a página para limpar os dados VIP da tela
+}
+
+async function carregarPerfil() {
+    if (!usuarioLogado) return;
+    const { data, error } = await supabase.from('perfis').select('*').eq('id', usuarioLogado.id).single();
+    if (data) {
+        perfilUsuario = data;
+        console.log('Perfil carregado:', perfilUsuario);
+    }
+}
+function fecharModalJogo() { modalJogo.classList.add('hidden'); }
+const esc = valor => valor === null || valor === undefined || valor === '' ? 'N/A' : valor;
 function formatarHistorico(hist) {
     if (!hist || typeof hist === 'string' || hist.status !== 'ok') return '';
     let cor = hist.winrate >= 70 ? '#a6e3a1' : (hist.winrate >= 60 ? '#f9e2af' : '#f38ba8');
     return `<br><span style="font-size:11px;white-space:nowrap;margin-top:2px;display:inline-block;">🟢 <strong style="color:#a6e3a1;">${hist.greens}G</strong> &nbsp;|&nbsp; 🔴 <strong style="color:#f38ba8;">${hist.reds}R</strong> &nbsp;|&nbsp; 📈 <strong style="color:${cor};">${hist.winrate}%</strong></span>`;
 }
 
-// ==========================================
-// 6. GERAÇÃO DE HTML DOS MERCADOS E JOGO
-// ==========================================
+// O MOTOR QUE GERA OS MERCADOS PARA O PERÍODO CLICADO (FT, HT ou ST)
 function gerarHTMLMercados(mercados, prefixo) {
-    const isVIPMarket = prefixo === 'ht_' || prefixo === 'st_';
-    
-    // Mostra explicitamente que é preciso ser VIP se o utilizador não for premium
-    if (isVIPMarket && !isPremium) {
-        return `
-        <div style="text-align:center; padding:40px 20px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid #334155;">
-            <div style="font-size: 30px; margin-bottom: 10px;">🔒</div>
-            <h3 style="color: #f9e2af; margin-bottom: 5px;">Exclusivo VIP</h3>
-            <p style="color: #94a3b8; font-size: 13px; margin-bottom: 15px;">Os mercados de ${prefixo === 'ht_' ? '1º Tempo' : '2º Tempo'} são reservados a assinantes.</p>
-            <button onclick="fecharModalJogo(); abrirModalAuth();" style="padding: 8px 16px; background: #00ff88; color: black; border: none; border-radius: 4px; font-weight: bold; cursor: pointer;">Fazer Login / Assinar</button>
-        </div>`;
-    }
-
-    if (mercados[`${prefixo}p_home`] === undefined) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Aguardando dados ou dados indisponíveis.</div>`;
-
     const m = (nome, chave) => {
         const valor = mercados[`${prefixo}p_${chave}`];
         if (valor === undefined || valor === null) return '';
@@ -298,11 +236,13 @@ function gerarHTMLMercados(mercados, prefixo) {
         return `<div class="prob-bar" style="opacity: ${opacidade};"><span>${nome} ${formatarHistorico(hist)}</span><strong>${esc(valor)}%</strong></div>`;
     };
 
+    // Design moderno em caixinhas (Grid)
     const renderEsperadosGrid = () => {
         const golsT = mercados[`${prefixo}exp_gols_totais`];
         const cantosT = mercados[`${prefixo}exp_cantos_totais`];
         const cartoesT = mercados[`${prefixo}exp_cartoes_totais`];
 
+        // Se não tiver nenhum dado esperado, retorna vazio
         if (!golsT && !cantosT && !cartoesT) return '';
 
         let html = `<div class="market-group">
@@ -316,6 +256,7 @@ function gerarHTMLMercados(mercados, prefixo) {
                 <div style="font-size: 13px; color: #fff;">✈️ Fora: ${mercados[`${prefixo}exp_gols_fora`] || '-'}</div>
             </div>`;
         }
+
         if (cantosT) {
             html += `<div style="background: rgba(255,255,255,0.05); padding: 10px 12px; border-radius: 8px; flex: 1; min-width: 140px; border: 1px solid rgba(255,255,255,0.1);">
                 <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 6px; font-weight: bold;">🚩 Cantos (Total: ${cantosT})</div>
@@ -323,6 +264,7 @@ function gerarHTMLMercados(mercados, prefixo) {
                 <div style="font-size: 13px; color: #fff;">✈️ Fora: ${mercados[`${prefixo}exp_cantos_fora`] || '-'}</div>
             </div>`;
         }
+
         if (cartoesT) {
             html += `<div style="background: rgba(255,255,255,0.05); padding: 10px 12px; border-radius: 8px; flex: 1; min-width: 140px; border: 1px solid rgba(255,255,255,0.1);">
                 <div style="font-size: 12px; color: #cbd5e1; margin-bottom: 6px; font-weight: bold;">🟨 Cartões (Total: ${cartoesT})</div>
@@ -330,14 +272,18 @@ function gerarHTMLMercados(mercados, prefixo) {
                 <div style="font-size: 13px; color: #fff;">✈️ Fora: ${mercados[`${prefixo}exp_cartoes_fora`] || '-'}</div>
             </div>`;
         }
+
         html += `</div></div>`;
         return html;
     };
 
+    if (mercados[`${prefixo}p_home`] === undefined) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Dados não disponíveis para este período na base de dados.</div>`;
+
     const premiumClass = isPremium ? "" : "locked-content";
-    const avisoVIP = isPremium ? "" : `<div class="locked-warning" onclick="fecharModalJogo(); abrirModalAuth();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>`;
+    const avisoVIP = isPremium ? "" : `<div class="locked-warning" onclick="fecharModalJogo(); abrirLogin();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>`;
 
     return `
+        <!-- CAIXINHAS MODERNAS NO TOPO DA TELA -->
         ${renderEsperadosGrid()}
         
         <div class="market-group">
@@ -380,7 +326,6 @@ function gerarHTMLMercados(mercados, prefixo) {
         </div>
     `;
 }
-
 function nomeMercado(chave) {
     const fixos = { home: 'Casa (1)', draw: 'Empate', away: 'Fora (2)', btts_yes: 'Ambas - Sim', btts_no: 'Ambas - Não' };
     if (fixos[chave]) return fixos[chave];
@@ -409,6 +354,7 @@ function gerarHTMLResultados(mercados) {
         let g = 0, r = 0, p = 0, linhas = '';
 
         Object.keys(mercados).forEach(key => {
+            // Pega só as chaves de probabilidade do período (p_, ht_p_, st_p_)
             if (!key.startsWith(`${prefixo}p_`)) return;
             const merc = key.slice(`${prefixo}p_`.length);
             const probNum = Number(mercados[key]);
@@ -434,20 +380,21 @@ function gerarHTMLResultados(mercados) {
 
     if (isPremium) return html;
     return `<div class="locked-container">
-        <div class="locked-warning" onclick="fecharModalJogo(); abrirModalAuth();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
+        <div class="locked-warning" onclick="fecharModalJogo(); abrirLogin();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
         <div class="locked-content">${html}</div>
     </div>`;
 }
-
 async function abrirDetalhesJogo(jogo) {
     try {
         const classCasa = jogo.classificacao?.casa || {};
         const classFora = jogo.classificacao?.fora || {};
 
+        // Gerando o HTML de cada Aba de Tempo
         const htmlFT = gerarHTMLMercados(jogo.mercados || {}, '');
         const htmlHT = gerarHTMLMercados(jogo.mercados || {}, 'ht_');
         const htmlST = gerarHTMLMercados(jogo.mercados || {}, 'st_');
 
+        // TABELA CLASSIFICAÇÃO
         let linhasTabela = '';
         if (jogo.classificacao?.tabela?.GERAL?.length > 0) {
             jogo.classificacao.tabela.GERAL.forEach(time => {
@@ -456,13 +403,14 @@ async function abrirDetalhesJogo(jogo) {
             });
         } else linhasTabela = `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:15px;">Tabela indisponível.</td></tr>`;
 
+        // TABELA ARTILHEIROS
         let htmlArtilheiros = '';
         if (jogo.artilheiros?.length > 0) {
             jogo.artilheiros.forEach(art => {
                 let d = (String(art.id_time) === String(jogo.id_time_casa) || String(art.flashscore_id_time) === String(jogo.id_time_casa)) ? 'highlight-casa' : ((String(art.id_time) === String(jogo.id_time_fora) || String(art.flashscore_id_time) === String(jogo.id_time_fora)) ? 'highlight-fora' : '');
                 htmlArtilheiros += `<tr class="${d}"><td>${art.posicao}º</td><td class="text-left"><strong>${art.nome_jogador}</strong><br><small style="color:#94a3b8;">${art.nome_time}</small></td><td><strong>${art.gols}</strong></td><td>${art.assistencias || 0}</td></tr>`;
             });
-        } else htmlArtilheiros = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:15px;">Nenhum artilheiro registado.</td></tr>`;
+        } else htmlArtilheiros = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:15px;">Nenhum artilheiro registrado.</td></tr>`;
 
         detalhesJogo.innerHTML = `
             <h2>${jogo.casa || '-'} x ${jogo.fora || '-'}</h2>
@@ -473,7 +421,7 @@ async function abrirDetalhesJogo(jogo) {
                 <button id="btn-tab-classificacao" class="tab-btn" onclick="mudarAbaPrincipal('classificacao')">🏆 Classificação</button>
                 <button id="btn-tab-artilheiros" class="tab-btn" onclick="mudarAbaPrincipal('artilheiros')">⚽ Artilheiros</button>
                 <button id="btn-tab-resultados" class="tab-btn" onclick="mudarAbaPrincipal('resultados')">✅ Resultados</button>
-            </div>
+             </div>
 
             <div id="aba-mercados">
                 <div class="market-group" style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 15px;">
@@ -487,6 +435,7 @@ async function abrirDetalhesJogo(jogo) {
                     </div>
                 </div>
 
+                <!-- SUB-ABAS DOS TEMPOS -->
                 <div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;">
                     <button id="btn-tempo-ft" onclick="mudarTempo('ft')" style="padding: 6px 12px; background: #3b82f6; border: none; border-radius: 4px; color: white; font-weight: bold; cursor: pointer;">Jogo (FT)</button>
                     <button id="btn-tempo-ht" onclick="mudarTempo('ht')" style="padding: 6px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #94a3b8; font-weight: bold; cursor: pointer;">1º Tempo (HT)</button>
@@ -499,7 +448,7 @@ async function abrirDetalhesJogo(jogo) {
             </div>
 
             <div id="aba-classificacao" style="display: none;">
-                <table class="tabela-class"><thead><tr><th width="5%">#</th><th class="text-left" width="45%">Equipa</th><th width="8%">Pts</th><th width="7%">J</th><th width="7%">V</th><th width="7%">E</th><th width="7%">D</th></tr></thead><tbody>${linhasTabela}</tbody></table>
+                <table class="tabela-class"><thead><tr><th width="5%">#</th><th class="text-left" width="45%">Equipe</th><th width="8%">Pts</th><th width="7%">J</th><th width="7%">V</th><th width="7%">E</th><th width="7%">D</th></tr></thead><tbody>${linhasTabela}</tbody></table>
             </div>
 
             <div id="aba-artilheiros" style="display: none;">
@@ -511,7 +460,7 @@ async function abrirDetalhesJogo(jogo) {
             </div>
         `;
 
-        if (modalJogo) modalJogo.classList.remove('hidden');
+        modalJogo.classList.remove('hidden');
 
         window.mudarAbaPrincipal = function (aba) {
             ['mercados', 'classificacao', 'artilheiros', 'resultados'].forEach(a => {
@@ -532,7 +481,6 @@ async function abrirDetalhesJogo(jogo) {
             });
         };
 
-    } catch (err) { alert("Erro ao carregar os detalhes do jogo."); }
+    } catch (err) { alert("Erro ao carregar detalhes."); }
 }
-
 window.onload = iniciar;
