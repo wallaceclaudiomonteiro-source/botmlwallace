@@ -186,7 +186,7 @@
             background: transparent;
         }
 
-        /* ESTILOS INTERNOS DOS MERCADOS (Mantidos do anterior) */
+        /* ESTILOS INTERNOS DOS MERCADOS */
         .market-group {
             background: #1e293b;
             padding: 15px;
@@ -293,34 +293,6 @@
             font-weight: bold;
         }
 
-        .sub-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 15px;
-            justify-content: center;
-        }
-
-        .sub-tab-btn {
-            background: #1e293b;
-            color: #cbd5e1;
-            border: 1px solid #334155;
-            padding: 6px 18px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: 0.2s;
-        }
-
-        .sub-tab-btn:hover {
-            background: #334155;
-        }
-
-        .sub-tab-btn.active {
-            background: #3b82f6;
-            border-color: #3b82f6;
-            color: white;
-        }
-
         .tabela-class {
             width: 100%;
             border-collapse: collapse;
@@ -372,13 +344,13 @@
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
             margin-bottom: 15px;
         }
 
         .form-group input {
             padding: 12px;
-            font-size: 15px;
+            font-size: 14px;
             background: #0f172a;
         }
 
@@ -391,7 +363,7 @@
             border: none;
             border-radius: 4px;
             color: white;
-            margin-top: 10px;
+            margin-top: 5px;
         }
 
         .btn-submit:hover {
@@ -400,7 +372,6 @@
 
         .btn-comprar {
             background: #10b981;
-            margin-top: 15px;
         }
 
         .btn-comprar:hover {
@@ -418,12 +389,13 @@
             <select id="seletor-data" style="margin-left: 10px; font-weight: bold;"></select>
         </div>
 
-        <!-- Botão Entrar ou Status Logado -->
-        <button id="btn-abrir-login" class="btn-login" onclick="abrirLogin()">Entrar / VIP</button>
-        <div id="status-logado" class="user-status">
-            <span>💎 Assinante VIP</span>
-            <button onclick="sairConta()"
-                style="font-size: 11px; padding: 4px 8px; background: transparent; color: #f87171; border-color: #f87171;">Sair</button>
+        <!-- Botão Entrar ou Status Logado (Integrado com app.js) -->
+        <button id="btn-abrir-login" class="btn-login" onclick="abrirModalAuth()">Entrar / VIP</button>
+        
+        <div id="info-usuario" class="user-status" style="display: none;">
+            <span id="nome-usuario-logado"></span>
+            <span id="status-vip-badge" style="background: gold; color: black; padding: 2px 6px; border-radius: 4px; font-size: 11px;"></span>
+            <button onclick="fazerLogout()" style="font-size: 11px; padding: 4px 8px; background: transparent; color: #f87171; border-color: #f87171;">Sair</button>
         </div>
     </div>
 
@@ -439,33 +411,35 @@
     </div>
 
     <!-- Modal de LOGIN / ASSINATURA -->
-    <!-- Modal de Login / Cadastro -->
-    <div id="modal-auth" class="modal" style="display: none;">
-        <div class="modal-content">
-            <h2 id="auth-titulo">Entrar no VIP</h2>
+    <div id="modal-auth" class="modal-overlay" style="display: none;">
+        <div class="modal-login-content">
+            <button class="btn-fechar" onclick="fecharModalAuth()">×</button>
+            <h2 id="auth-titulo" style="margin-top: 0; color: #f8fafc; font-size: 22px;">Entrar no VIP</h2>
 
-            <div id="form-login">
+            <!-- Formulário de Login -->
+            <div id="form-login" class="form-group">
                 <input type="email" id="email-login" placeholder="Seu e-mail">
                 <input type="password" id="senha-login" placeholder="Sua senha">
-                <button onclick="fazerLogin()">Entrar</button>
-                <p>Não tem conta? <a href="#" onclick="alternarFormAuth('cadastro')">Cadastre-se e ganhe 3 dias
-                        grátis</a></p>
+                <button class="btn-submit" onclick="fazerLogin()">Entrar</button>
+                <p style="text-align: center; font-size: 13px; margin-top: 15px;">Não tem conta? <a href="#" onclick="alternarFormAuth('cadastro')" style="color: #60a5fa; text-decoration: none;">Cadastre-se e ganhe 3 dias grátis</a></p>
             </div>
 
-            <div id="form-cadastro" style="display: none;">
+            <!-- Formulário de Cadastro -->
+            <div id="form-cadastro" class="form-group" style="display: none;">
                 <input type="text" id="nome-cad" placeholder="Nome completo">
                 <input type="email" id="email-cad" placeholder="Seu e-mail">
                 <input type="password" id="senha-cad" placeholder="Crie uma senha">
-                <label>Data de Nascimento (+18):</label>
+                <label style="font-size: 12px; color: #94a3b8; margin-bottom: -8px;">Data de Nascimento (+18):</label>
                 <input type="date" id="nasc-cad">
                 <input type="text" id="time-cad" placeholder="Time do coração (opcional)">
-                <button onclick="fazerCadastro()">Criar Conta VIP</button>
-                <p>Já tem conta? <a href="#" onclick="alternarFormAuth('login')">Faça login</a></p>
+                <button class="btn-submit btn-comprar" onclick="fazerCadastro()">Criar Conta VIP</button>
+                <p style="text-align: center; font-size: 13px; margin-top: 15px;">Já tem conta? <a href="#" onclick="alternarFormAuth('login')" style="color: #60a5fa; text-decoration: none;">Faça login</a></p>
             </div>
 
-            <p id="auth-msg-erro" style="color: red;"></p>
+            <p id="auth-msg-erro" style="text-align: center; font-size: 14px; min-height: 20px; margin-bottom: 0;"></p>
         </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js?v=5"></script>
 </body>
