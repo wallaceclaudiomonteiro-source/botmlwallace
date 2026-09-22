@@ -430,5 +430,5 @@ async function processarJogos(dataInicial) {
     }
 }
 
-const dataEscolhida = '2023-01-01';
+const dataEscolhida = '2026-01-01';
 processarJogos(dataEscolhida);

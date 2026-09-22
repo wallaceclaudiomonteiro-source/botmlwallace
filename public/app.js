@@ -161,34 +161,13 @@ function alternarFormAuth(modo) {
 let dadosVipDoDia = [];
 
 async function fazerLogin() {
-    const senha = document.getElementById('input-senha').value;
-    const dataAtual = document.getElementById('seletor-data').value;
-    
-    try {
-        // Tenta baixar o arquivo VIP passando a senha escondida no cabeçalho
-        const resposta = await fetch(`/privado/${dataAtual}.json`, {
-            headers: { 'x-senha-vip': senha }
-        });
+    const email = document.getElementById('email-login').value;
+    const senha = document.getElementById('senha-login').value;
+    const erroMsg = document.getElementById('auth-msg-erro');
 
-        if (resposta.ok) {
-            // Acesso liberado pelo Cloudflare!
-            dadosVipDoDia = await resposta.json();
-            isPremium = true;
-            
-            document.getElementById('btn-abrir-login').style.display = 'none';
-            document.getElementById('status-logado').style.display = 'flex';
-            fecharLogin();
-            
-            alert("Acesso Premium Liberado!");
-            
-            // Se o usuário estava com algum jogo aberto, atualiza a tela para mostrar os mercados
-            if (!modalJogo.classList.contains('hidden')) fecharModalJogo();
-        } else {
-            alert("Senha incorreta ou expirada.");
-        }
-    } catch (err) {
-        alert("Erro ao conectar com o servidor VIP.");
-    }
+    erroMsg.innerText = 'Entrando...';
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
+    if (error) erroMsg.innerText = 'Erro: E-mail ou senha incorretos.';
 }
 
 async function fazerCadastro() {
