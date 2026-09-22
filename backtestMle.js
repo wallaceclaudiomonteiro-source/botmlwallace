@@ -5,7 +5,7 @@ const {
     projetarExpectativaGols
 } = require('./market_model');
 
-const client = criarClient('site');
+const client = criarClient('modelo');
 
 
 async function rodarBacktest(
@@ -144,7 +144,8 @@ async function rodarBacktest(
                   AND metrica IN (
                       'xg',
                       'xgot',
-                      'gols_marcados'
+                      'gols_marcados',
+                      'finalizacoes_no_gol'
                   )
 
             `, [
@@ -293,6 +294,8 @@ async function rodarBacktest(
 
                     sg.gols_marcados,
 
+                    sg.finalizacoes_no_gol,
+
                     EXP(
                         -0.005 *
                         (
@@ -399,6 +402,11 @@ async function rodarBacktest(
                             gols_marcados_fora: null,
 
 
+                            finalizacoes_no_gol_casa: null,
+
+                            finalizacoes_no_gol_fora: null,
+
+
                             /*
                              * PESO TEMPORAL
                              */
@@ -441,6 +449,12 @@ async function rodarBacktest(
                         : null;
 
 
+                const finalizacoesNoGol =
+                    linha.finalizacoes_no_gol !== null
+                        ? Number(linha.finalizacoes_no_gol)
+                        : null;
+
+
                 /*
                  * ====================================================
                  * TIME DA CASA
@@ -457,6 +471,9 @@ async function rodarBacktest(
 
                     jogo.gols_marcados_casa =
                         golsMarcados;
+
+                    jogo.finalizacoes_no_gol_casa =
+                        finalizacoesNoGol;
                 }
 
 
@@ -476,6 +493,9 @@ async function rodarBacktest(
 
                     jogo.gols_marcados_fora =
                         golsMarcados;
+
+                    jogo.finalizacoes_no_gol_fora =
+                        finalizacoesNoGol;
                 }
             }
 
@@ -852,6 +872,6 @@ async function rodarBacktest(
  */
 
 rodarBacktest(
-    '2025-01-01',
+    '2026-01-01',
     '2026-09-20'
 );

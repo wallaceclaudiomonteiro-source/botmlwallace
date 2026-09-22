@@ -65,15 +65,19 @@ const METRIC_MAP = {
 // --- Inicialização do Banco de Dados PostgreSQL ---
 async function iniciarBancoDeDados() {
     try {
-        // Tenta conectar. Se já estiver conectado, ele captura o erro, ignora e segue em frente.
         try {
             await client.connect();
-            console.log('✅ LOG BD: Banco de dados PostgreSQL (Matriz) conectado!');
+            
+            // 👇 A PROVA DOS 9 ENTRA AQUI, DENTRO DA FUNÇÃO ASYNC 👇
+            const info = await client.query('SELECT current_database(), current_user');
+            console.log(`✅ LOG BD: Conectado DE FATO no banco: [ ${info.rows[0].current_database} ] com o usuário: [ ${info.rows[0].current_user} ]`);
+            // 👆 ================================================== 👆
+
         } catch (connErr) {
             if (connErr.message.includes('already been connected')) {
                 // Silenciosamente aceita que já está conectado e continua
             } else {
-                throw connErr; // Se for erro de senha ou rede, ele acusa normalmente
+                throw connErr; 
             }
         }
 
@@ -208,13 +212,20 @@ async function coletaViaCalendario(db, navegador) {
         }
 
         try {
-            // Raspa os detalhes do lote inteiro de uma vez
-            const dadosCompletos = await processarJogosEmLotes(arrayDeLinks, navegador);
+            // 👇 Ajustado para receber o objeto com { sucesso, falhas }
+            const resultadoLotes = await processarJogosEmLotes(arrayDeLinks, navegador);
+            const dadosCompletos = resultadoLotes.sucesso;
+            const errosDeScraping = resultadoLotes.falhas; 
 
             const dadosValidos = {};
-            let jogosComAnomalia = [];
+            let jogosComAnomalia = []; // Para jogar no "jogo_adiado = 2"
 
-            // Separa quem é jogo bom de quem está cancelado/adiado (placar nulo)
+            // 1. Registra quem deu Erro no Puppeteer / Timeout
+            for (const falha of errosDeScraping) {
+                jogosComAnomalia.push({ id: falha.flashscore_id, motivo: falha.motivo.substring(0, 50) });
+            }
+
+            // 2. Separa quem é jogo bom de quem está cancelado/adiado (placar nulo)
             for (const fsId in dadosCompletos) {
                 const jogo = dadosCompletos[fsId];
 
@@ -227,7 +238,7 @@ async function coletaViaCalendario(db, navegador) {
                 }
             }
 
-            // 1. PROCESSA APENAS OS JOGOS BONS (Fluxo Completo)
+            // PROCESSA APENAS OS JOGOS BONS (Fluxo Completo)
             if (Object.keys(dadosValidos).length > 0) {
                 await inserirJogos(db, dadosValidos);
                 await inserirEventosESumario(db, dadosValidos);
@@ -240,15 +251,15 @@ async function coletaViaCalendario(db, navegador) {
                 await client.query(`UPDATE calendario SET status_coletado = 1 WHERE flashscore_id = ANY($1::text[])`, [idsValidos]);
             }
 
-            // 2. TRATA OS RUINS (Atualiza o calendário com o motivo e bloqueia novas buscas)
+            // TRATA OS RUINS (Atualiza o calendário com o motivo e bloqueia novas buscas)
             if (jogosComAnomalia.length > 0) {
                 for (const anomalia of jogosComAnomalia) {
                     await client.query(
-                        `UPDATE calendario SET jogo_adiado = 1, status_partida = $1 WHERE flashscore_id = $2`,
+                        `UPDATE calendario SET jogo_adiado = 2, status_partida = $1 WHERE flashscore_id = $2`, // 👈 MUDADO PARA 2
                         [anomalia.motivo, anomalia.id]
                     );
                 }
-                console.log(`🚩 LOG: ${jogosComAnomalia.length} jogos marcados como adiados/cancelados no calendário.`);
+                console.log(`🚩 LOG: ${jogosComAnomalia.length} jogos marcados como adiados/cancelados/erro (jogo_adiado = 2) no calendário.`);
             }
 
             console.log(`\n✅ LOG: Lote do calendário processado com sucesso!`);
@@ -256,6 +267,7 @@ async function coletaViaCalendario(db, navegador) {
 
         } catch (erroFases) {
             console.error(`❌ ERRO NO PROCESSAMENTO DO LOTE (Calendário):`, erroFases.message);
+            // Se quebrar feio o lote todo
             if (flashscoreIdsLote.length > 0) {
                 await client.query(`UPDATE calendario SET status_coletado = 1 WHERE flashscore_id = ANY($1::text[])`, [flashscoreIdsLote]);
             }
@@ -340,6 +352,8 @@ async function scrapStatsFromPage(page, label) {
 async function processarJogosEmLotes(links, navegador) {
     const TAMANHO_LOTE = 5;
     const todasAsPastas = {};
+    const falhas = []; // 👈 Nova lista para armazenar os jogos com erro (ex: timeout)
+
     console.log(`\n🚀 LOG FASE 2: Iniciando processamento de ${links.length} links em lotes de ${TAMANHO_LOTE}...`);
     for (let i = 0; i < links.length; i += TAMANHO_LOTE) {
         const loteDeLinks = links.slice(i, i + TAMANHO_LOTE);
@@ -348,23 +362,42 @@ async function processarJogosEmLotes(links, navegador) {
             loteDeLinks.map(link => rasparDetalhesDoJogo(link, navegador))
         );
         for (const resultado of resultadosDoLote) {
-            if (resultado && resultado.flashscore_id) {
-                todasAsPastas[resultado.flashscore_id] = resultado.dados;
+            if (resultado) {
+                // Se retornou o objeto de erro (Timeout/Erro Puppeteer)
+                if (resultado.erro_critico && resultado.flashscore_id) {
+                    falhas.push(resultado);
+                } 
+                // Se retornou o jogo com sucesso
+                else if (resultado.flashscore_id) {
+                    todasAsPastas[resultado.flashscore_id] = resultado.dados;
+                }
             }
         }
         console.log(`⏳ Lote processado. Pequena pausa antes do próximo...`);
         await pausa(2, 4);
     }
-    console.log(`\n✅ LOG FASE 2: Extração finalizada! Dados armazenados:`);
-    return todasAsPastas;
+    console.log(`\n✅ LOG FASE 2: Extração finalizada! Dados lidos: ${Object.keys(todasAsPastas).length} | Erros: ${falhas.length}`);
+    
+    // 👇 Agora a função retorna um objeto dividindo os bons e os com erro
+    return { sucesso: todasAsPastas, falhas: falhas };
 }
 
 async function rasparDetalhesDoJogo(linkBase, navegador) {
     let paginaJogo;
+    
+    // Melhor extração do ID (garante que vamos pegar o ID para atualizar o banco se der erro)
+    let idJogo = null;
+    if (linkBase.includes('mid=')) {
+        idJogo = linkBase.split('mid=')[1].substring(0, 8);
+    } else {
+        const matchRegex = linkBase.match(/\/(?:jogo|match)\/([a-zA-Z0-9]{8})/);
+        if (matchRegex) idJogo = matchRegex[1];
+    }
+
     try {
         paginaJogo = await navegador.newPage();
-        const idJogo = linkBase.includes('?mid=') ? linkBase.split('?mid=').pop() : null;
-        await paginaJogo.goto(linkBase, { waitUntil: 'domcontentloaded', timeout: 45000 }); await paginaJogo.waitForSelector('.duelParticipant', { timeout: 15000 });
+        await paginaJogo.goto(linkBase, { waitUntil: 'domcontentloaded', timeout: 45000 }); 
+        await paginaJogo.waitForSelector('.duelParticipant', { timeout: 15000 });
         await new Promise(r => setTimeout(r, 1500));
         const dadosResumo = await paginaJogo.evaluate(() => {
             const extrairFsId = (seletor) => {
@@ -536,7 +569,8 @@ async function rasparDetalhesDoJogo(linkBase, navegador) {
         return pastaDoJogo;
     } catch (erro) {
         console.error(`❌ Erro ao raspar o jogo ${linkBase}: ${erro.message}`);
-        return null;
+        // 👇 AGORA RETORNAMOS O ERRO PARA MARCAR NO BANCO DEPOIS
+        return { erro_critico: true, flashscore_id: idJogo, motivo: "Erro Puppeteer: " + erro.message };
     } finally {
         if (paginaJogo) {
             await paginaJogo.close().catch(e => { });

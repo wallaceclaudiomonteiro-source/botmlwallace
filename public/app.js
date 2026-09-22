@@ -11,18 +11,17 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (session) {
         usuarioLogado = session.user;
         await carregarPerfil();
-        document.getElementById('modal-auth').style.display = 'none';
-        // Aqui você chamará a função que recarrega os jogos mostrando os dados VIP
+        fecharModalAuth();
     } else {
         usuarioLogado = null;
         perfilUsuario = null;
-        // Aqui o site deve voltar a bloquear os campos VIP
+        isPremium = false;
     }
+    atualizarHeaderAuth();
 });
 let isPremium = false;
 
 const modalJogo = document.getElementById('modal-jogo');
-const modalLogin = document.getElementById('modal-login');
 const detalhesJogo = document.getElementById('detalhes-jogo');
 const listaJogos = document.getElementById('lista-jogos');
 
@@ -138,13 +137,11 @@ async function carregarJogos(dataSelecionada) {
         listaJogos.innerHTML = `<p style="grid-column:1/-1;text-align:center;color:#f87171;padding:20px;">Erro: ${err.message}</p>`;
     }
 }
-function abrirLogin() { modalLogin.classList.remove('hidden'); }
-function fecharLogin() { modalLogin.classList.add('hidden'); }
-function mudarAbaLogin(aba) {
-    document.getElementById('area-entrar').style.display = aba === 'entrar' ? 'block' : 'none';
-    document.getElementById('area-criar').style.display = aba === 'criar' ? 'block' : 'none';
-    document.getElementById('tab-entrar').classList.toggle('active', aba === 'entrar');
-    document.getElementById('tab-criar').classList.toggle('active', aba === 'criar');
+function abrirModalAuth() {
+    document.getElementById('modal-auth').style.display = 'flex';
+}
+function fecharModalAuth() {
+    document.getElementById('modal-auth').style.display = 'none';
 }
 
 function alternarFormAuth(modo) {
@@ -209,9 +206,36 @@ async function fazerLogout() {
 
 async function carregarPerfil() {
     if (!usuarioLogado) return;
-    const { data, error } = await supabaseClient.from('perfis').select('*').eq('id', usuarioLogado.id).single(); if (data) {
+    const { data, error } = await supabaseClient.from('perfis').select('*').eq('id', usuarioLogado.id).single();
+    if (data) {
         perfilUsuario = data;
-        console.log('Perfil carregado:', perfilUsuario);
+        isPremium = calcularPremium(perfilUsuario);
+    }
+}
+
+function calcularPremium(perfil) {
+    if (!perfil) return false;
+    const agora = new Date();
+    if (perfil.status === 'vip' && perfil.vip_expira_em && new Date(perfil.vip_expira_em) > agora) return true;
+    if (perfil.status === 'teste' && perfil.teste_expira_em && new Date(perfil.teste_expira_em) > agora) return true;
+    return false;
+}
+
+function atualizarHeaderAuth() {
+    const btnLogin = document.getElementById('btn-abrir-login');
+    const infoUsuario = document.getElementById('info-usuario');
+    const nomeEl = document.getElementById('nome-usuario-logado');
+    const badgeEl = document.getElementById('status-vip-badge');
+
+    if (usuarioLogado && perfilUsuario) {
+        btnLogin.style.display = 'none';
+        infoUsuario.style.display = 'flex';
+        nomeEl.textContent = perfilUsuario.nome_completo || usuarioLogado.email;
+        badgeEl.textContent = isPremium ? (perfilUsuario.status === 'vip' ? '💎 VIP' : '🎁 Teste VIP') : 'Expirado';
+        badgeEl.style.display = 'inline-block';
+    } else {
+        btnLogin.style.display = 'block';
+        infoUsuario.style.display = 'none';
     }
 }
 function fecharModalJogo() { modalJogo.classList.add('hidden'); }
