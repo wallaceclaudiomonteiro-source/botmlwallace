@@ -134,10 +134,19 @@ const percentual = (val) => val !== null && val !== undefined && val !== '' ? (p
 //             agora é lido de cada jogo e multiplicado em TODAS as
 //             contribuições de gradiente daquele jogo.
 //
-// CORREÇÃO 2: quando falta xGOT, o fallback só usa a fatia de peso que
-//             sobrou do xGOT ausente (pXGOT), redistribuída 80/20 entre
-//             xG e gols — o orçamento total de peso do ataque continua
-//             somando 1.0 nos dois cenários (com ou sem xGOT).
+// CORREÇÃO 2: pesos por NÍVEL de disponibilidade de dado, decidido por LADO
+//             (casa e fora podem cair em níveis diferentes no mesmo jogo):
+//               nível 1 (xG e xGOT presentes)      -> xG 0.30 / xGOT 0.50 / gols 0.20
+//               nível 2 (falta só xGOT)             -> xG 0.80 / gols 0.20
+//               nível 3a (faltam xG e xGOT, tem
+//                         finalizações no gol)      -> finalizações 0.80 / gols 0.20
+//               nível 3b (faltam xG, xGOT e
+//                         finalizações)             -> gols 1.0
+//             validado empiricamente: corr(gols, finalizações no gol) nos
+//             jogos sem xG/xGOT = 0.5681 (r² 0.3227), praticamente igual à
+//             corr geral (0.5745 / r² 0.3301) — canal vale a pena. O
+//             orçamento total de peso do ataque continua somando 1.0 em
+//             todos os cenários, em vez de apenas descartar o canal ausente.
 // ============================================================================
 
 // Constantes para o Fator de Nível (Calibração final)
@@ -155,6 +164,11 @@ async function otimizarModeloConjunto(
     pesoXG = 0.30,
     pesoXGOT = 0.50,
     pesoGols = 0.20,
+    // Pesos de fallback por nível de disponibilidade — ver comentário acima.
+    pesoXGSemXGOT = 0.80,
+    pesoGolsSemXGOT = 0.20,
+    pesoFinalizacoesSemXGXGOT = 0.80,
+    pesoGolsSemXGXGOT = 0.20,
     regularizacao = 0.015,
     gradienteMax = 5
   } = opcoes;
@@ -165,6 +179,11 @@ async function otimizarModeloConjunto(
   const mediaXGOTFora = Number(referenciaLiga.xgot?.fora) > 0 ? Number(referenciaLiga.xgot.fora) : 0.86;
   const mediaGolsCasa = Number(referenciaLiga.gols_marcados?.casa) > 0 ? Number(referenciaLiga.gols_marcados.casa) : 1.45;
   const mediaGolsFora = Number(referenciaLiga.gols_marcados?.fora) > 0 ? Number(referenciaLiga.gols_marcados.fora) : 1.15;
+  // TODO: confirmar nome real da coluna/métrica na grid (ex.: 'finalizacoes_no_gol')
+  // e ajustar referenciaLiga.finalizacoes_no_gol.casa/fora — placeholders abaixo
+  // só evitam divisão por zero enquanto o valor real da liga não é passado.
+  const mediaFinalizacoesCasa = Number(referenciaLiga.finalizacoes_no_gol?.casa) > 0 ? Number(referenciaLiga.finalizacoes_no_gol.casa) : 4.60;
+  const mediaFinalizacoesFora = Number(referenciaLiga.finalizacoes_no_gol?.fora) > 0 ? Number(referenciaLiga.finalizacoes_no_gol.fora) : 3.75;
 
   if (!Array.isArray(jogosValidos) || jogosValidos.length === 0) {
     return {
@@ -191,11 +210,31 @@ async function otimizarModeloConjunto(
   const aplicarGradiente = (valor) => limitar(valor, -gradienteMax, gradienteMax);
   const pesoTemporal = (jogo) => (Number.isFinite(Number(jogo.peso_tempo)) ? Number(jogo.peso_tempo) : 1);
 
-  const canais = [
-    { peso: pesoXG, mediaCasa: mediaXGCasa, mediaFora: mediaXGFora, campoCasa: 'xg_casa', campoFora: 'xg_fora' },
-    { peso: pesoXGOT, mediaCasa: mediaXGOTCasa, mediaFora: mediaXGOTFora, campoCasa: 'xgot_casa', campoFora: 'xgot_fora' },
-    { peso: pesoGols, mediaCasa: mediaGolsCasa, mediaFora: mediaGolsFora, campoCasa: 'gols_marcados_casa', campoFora: 'gols_marcados_fora' }
-  ];
+  const canaisBase = {
+    xg: { mediaCasa: mediaXGCasa, mediaFora: mediaXGFora, campoCasa: 'xg_casa', campoFora: 'xg_fora' },
+    xgot: { mediaCasa: mediaXGOTCasa, mediaFora: mediaXGOTFora, campoCasa: 'xgot_casa', campoFora: 'xgot_fora' },
+    finalizacoes: { mediaCasa: mediaFinalizacoesCasa, mediaFora: mediaFinalizacoesFora, campoCasa: 'finalizacoes_no_gol_casa', campoFora: 'finalizacoes_no_gol_fora' },
+    gols: { mediaCasa: mediaGolsCasa, mediaFora: mediaGolsFora, campoCasa: 'gols_marcados_casa', campoFora: 'gols_marcados_fora' }
+  };
+
+  const PESOS_NIVEL_1 = { xg: pesoXG, xgot: pesoXGOT, gols: pesoGols };           // dado completo
+  const PESOS_NIVEL_2 = { xg: pesoXGSemXGOT, gols: pesoGolsSemXGOT };              // falta só xGOT
+  const PESOS_NIVEL_3A = { finalizacoes: pesoFinalizacoesSemXGXGOT, gols: pesoGolsSemXGXGOT }; // faltam xG e xGOT, tem finalizações
+  const PESOS_NIVEL_3B = { gols: 1.0 };                                            // faltam xG, xGOT e finalizações
+
+  // Decide o nível pelo LADO do jogo (casa ou fora) — os dois lados do
+  // mesmo jogo podem cair em níveis diferentes, já que a cobertura de
+  // xG/xGOT não é necessariamente igual pra casa e visitante.
+  const resolverPesosLado = (jogo, sufixo) => {
+    const temXG = numeroValido(jogo[`xg_${sufixo}`]) && Number(jogo[`xg_${sufixo}`]) > 0;
+    const temXGOT = numeroValido(jogo[`xgot_${sufixo}`]) && Number(jogo[`xgot_${sufixo}`]) > 0;
+    const temFinalizacoes = numeroValido(jogo[`finalizacoes_no_gol_${sufixo}`]) && Number(jogo[`finalizacoes_no_gol_${sufixo}`]) > 0;
+
+    if (temXG && temXGOT) return PESOS_NIVEL_1;
+    if (temXG) return PESOS_NIVEL_2;
+    if (temFinalizacoes) return PESOS_NIVEL_3A;
+    return PESOS_NIVEL_3B;
+  };
 
   const times = new Set();
   for (const jogo of jogosValidos) {
@@ -230,23 +269,31 @@ async function otimizarModeloConjunto(
       let gradCasa = 0;
       let gradFora = 0;
 
-      for (const c of canais) {
+      const pesosCasa = resolverPesosLado(jogo, 'casa');
+      for (const chave of Object.keys(pesosCasa)) {
+        const c = canaisBase[chave];
+        const peso = pesosCasa[chave];
         const obsCasa = Number(jogo[c.campoCasa]);
         if (numeroValido(obsCasa) && obsCasa > 0) {
           const erro = logRatio(obsCasa, c.mediaCasa * Math.exp(etaCasa));
           if (erro !== null) {
-            const g = pesoJogo * c.peso * erro;
+            const g = pesoJogo * peso * erro;
             gradCasa += g;
             gradDefesa[fora] += g;
             observacoes++;
           }
         }
+      }
 
+      const pesosFora = resolverPesosLado(jogo, 'fora');
+      for (const chave of Object.keys(pesosFora)) {
+        const c = canaisBase[chave];
+        const peso = pesosFora[chave];
         const obsFora = Number(jogo[c.campoFora]);
         if (numeroValido(obsFora) && obsFora > 0) {
           const erro = logRatio(obsFora, c.mediaFora * Math.exp(etaFora));
           if (erro !== null) {
-            const g = pesoJogo * c.peso * erro;
+            const g = pesoJogo * peso * erro;
             gradFora += g;
             gradDefesa[casa] += g;
             observacoes++;

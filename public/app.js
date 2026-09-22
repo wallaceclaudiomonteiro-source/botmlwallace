@@ -1,3 +1,26 @@
+// ==========================================
+// CONFIGURAÇÃO DO SUPABASE
+// ==========================================
+const SUPABASE_URL = 'https://ecefcscibdyvgozwenmf.supabase.co/rest/v1/';
+const SUPABASE_KEY = 'sb_publishable_300B_hoFIgaNp62KWvBAcQ_MBP-E9nj';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let usuarioLogado = null;
+let perfilUsuario = null;
+
+// Fica escutando mudanças na sessão (quando o usuário loga ou desloga)
+supabase.auth.onAuthStateChange(async (event, session) => {
+    if (session) {
+        usuarioLogado = session.user;
+        await carregarPerfil();
+        document.getElementById('modal-auth').style.display = 'none';
+        // Aqui você chamará a função que recarrega os jogos mostrando os dados VIP
+    } else {
+        usuarioLogado = null;
+        perfilUsuario = null;
+        // Aqui o site deve voltar a bloquear os campos VIP
+    }
+});
 let isPremium = false;
 
 const modalJogo = document.getElementById('modal-jogo');
@@ -125,21 +148,75 @@ function mudarAbaLogin(aba) {
     document.getElementById('tab-entrar').classList.toggle('active', aba === 'entrar');
     document.getElementById('tab-criar').classList.toggle('active', aba === 'criar');
 }
-function fazerLogin() {
-    const senha = document.getElementById('input-senha').value;
-    if (['vip123', 'wallace2026'].includes(senha)) {
-        isPremium = true;
-        document.getElementById('btn-abrir-login').style.display = 'none';
-        document.getElementById('status-logado').style.display = 'flex';
-        fecharLogin(); if (!modalJogo.classList.contains('hidden')) fecharModalJogo();
-    } else alert("Senha incorreta.");
+
+function alternarFormAuth(modo) {
+    document.getElementById('auth-msg-erro').innerText = '';
+    if (modo === 'cadastro') {
+        document.getElementById('form-login').style.display = 'none';
+        document.getElementById('form-cadastro').style.display = 'block';
+        document.getElementById('auth-titulo').innerText = 'Criar Conta';
+    } else {
+        document.getElementById('form-cadastro').style.display = 'none';
+        document.getElementById('form-login').style.display = 'block';
+        document.getElementById('auth-titulo').innerText = 'Entrar no VIP';
+    }
 }
-function sairConta() {
-    isPremium = false;
-    document.getElementById('input-senha').value = '';
-    document.getElementById('btn-abrir-login').style.display = 'block';
-    document.getElementById('status-logado').style.display = 'none';
-    if (!modalJogo.classList.contains('hidden')) fecharModalJogo();
+
+async function fazerLogin() {
+    const email = document.getElementById('email-login').value;
+    const senha = document.getElementById('senha-login').value;
+    const erroMsg = document.getElementById('auth-msg-erro');
+
+    erroMsg.innerText = 'Entrando...';
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+
+    if (error) erroMsg.innerText = 'Erro: E-mail ou senha incorretos.';
+}
+
+async function fazerCadastro() {
+    const nome = document.getElementById('nome-cad').value;
+    const email = document.getElementById('email-cad').value;
+    const senha = document.getElementById('senha-cad').value;
+    const nasc = document.getElementById('nasc-cad').value;
+    const time = document.getElementById('time-cad').value;
+    const erroMsg = document.getElementById('auth-msg-erro');
+
+    // Validação de Idade (+18)
+    if (!nasc) return erroMsg.innerText = 'Preencha a data de nascimento.';
+    const idade = new Date().getFullYear() - new Date(nasc).getFullYear();
+    if (idade < 18) return erroMsg.innerText = 'Você precisa ter 18 anos ou mais para se cadastrar.';
+
+    erroMsg.innerText = 'Criando conta...';
+
+    // 1. Cria o usuário na autenticação
+    const { data, error } = await supabase.auth.signUp({ email, password: senha });
+    if (error) return erroMsg.innerText = 'Erro ao criar conta: ' + error.message;
+
+    // 2. Salva os dados extras na tabela 'perfis'
+    if (data.user) {
+        await supabase.from('perfis').insert([{
+            id: data.user.id,
+            email: email,
+            nome_completo: nome,
+            data_nascimento: nasc,
+            time_coracao: time,
+            status: 'teste' // Começa com o teste de 3 dias
+        }]);
+    }
+}
+
+async function fazerLogout() {
+    await supabase.auth.signOut();
+    location.reload(); // Recarrega a página para limpar os dados VIP da tela
+}
+
+async function carregarPerfil() {
+    if (!usuarioLogado) return;
+    const { data, error } = await supabase.from('perfis').select('*').eq('id', usuarioLogado.id).single();
+    if (data) {
+        perfilUsuario = data;
+        console.log('Perfil carregado:', perfilUsuario);
+    }
 }
 function fecharModalJogo() { modalJogo.classList.add('hidden'); }
 const esc = valor => valor === null || valor === undefined || valor === '' ? 'N/A' : valor;

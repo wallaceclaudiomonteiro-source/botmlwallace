@@ -439,43 +439,34 @@
     </div>
 
     <!-- Modal de LOGIN / ASSINATURA -->
-    <div id="modal-login" class="modal-overlay hidden">
-        <div class="modal-login-content">
-            <button class="btn-fechar" onclick="fecharLogin()">×</button>
-            <h2 style="margin-top: 0; text-align: center;">Acesso Premium</h2>
+    <!-- Modal de Login / Cadastro -->
+    <div id="modal-auth" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2 id="auth-titulo">Entrar no VIP</h2>
 
-            <div class="tabs-header" style="margin-top: 20px;">
-                <button id="tab-entrar" class="tab-btn active" onclick="mudarAbaLogin('entrar')">Entrar</button>
-                <button id="tab-criar" class="tab-btn" onclick="mudarAbaLogin('criar')">Assinar</button>
+            <div id="form-login">
+                <input type="email" id="email-login" placeholder="Seu e-mail">
+                <input type="password" id="senha-login" placeholder="Sua senha">
+                <button onclick="fazerLogin()">Entrar</button>
+                <p>Não tem conta? <a href="#" onclick="alternarFormAuth('cadastro')">Cadastre-se e ganhe 3 dias
+                        grátis</a></p>
             </div>
 
-            <!-- Aba Entrar -->
-            <div id="area-entrar">
-                <p style="font-size: 13px; color: #94a3b8; text-align: center; margin-bottom: 20px;">Insira sua
-                    credencial para acessar as análises de Cantos e BTTS.</p>
-                <div class="form-group">
-                    <input type="password" id="input-senha" placeholder="Sua Senha VIP (ex: vip123)">
-                </div>
-                <button class="btn-submit" onclick="fazerLogin()">Acessar Plataforma</button>
+            <div id="form-cadastro" style="display: none;">
+                <input type="text" id="nome-cad" placeholder="Nome completo">
+                <input type="email" id="email-cad" placeholder="Seu e-mail">
+                <input type="password" id="senha-cad" placeholder="Crie uma senha">
+                <label>Data de Nascimento (+18):</label>
+                <input type="date" id="nasc-cad">
+                <input type="text" id="time-cad" placeholder="Time do coração (opcional)">
+                <button onclick="fazerCadastro()">Criar Conta VIP</button>
+                <p>Já tem conta? <a href="#" onclick="alternarFormAuth('login')">Faça login</a></p>
             </div>
 
-            <!-- Aba Assinar (Preparada para o checkout futuro) -->
-            <div id="area-criar" style="display: none; text-align: center;">
-                <p style="font-size: 14px; color: #e2e8f0; margin-bottom: 10px;">Desbloqueie todo o poder do algoritmo.
-                </p>
-                <ul style="text-align: left; font-size: 13px; color: #94a3b8; margin-bottom: 20px; line-height: 1.6;">
-                    <li>✅ Previsão de Escanteios por Equipe</li>
-                    <li>✅ Probabilidade de Ambas Marcam</li>
-                    <li>✅ Gols Esperados (Over/Under)</li>
-                    <li>✅ Histórico Cruzado Detalhado</li>
-                </ul>
-                <!-- Aqui no futuro vai o link do Stripe/MercadoPago -->
-                <button class="btn-submit btn-comprar" onclick="alert('Integração de pagamento em breve!')">💳 Assinar
-                    Agora</button>
-            </div>
+            <p id="auth-msg-erro" style="color: red;"></p>
         </div>
     </div>
-
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js?v=5"></script>
 </body>
 

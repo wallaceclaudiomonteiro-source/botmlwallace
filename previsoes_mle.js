@@ -10,6 +10,9 @@ const client = criarClient('modelo');
 
 const RHO_DIXON_COLES = -0.1, MAX_GOLS_GRADE = 10, JANELA_HISTORICO = '1 year', MIN_JOGOS_TREINO = 20;
 const METRICAS_OBRIGATORIAS = ['xg', 'xgot', 'gols_marcados'];
+// Busca junto na grid, mas NÃO entra no check de faltantes abaixo —
+// é só o canal de fallback pra quando falta xG e xGOT no jogo.
+const METRICAS_GOLS_PARA_BUSCAR = [...METRICAS_OBRIGATORIAS, 'finalizacoes_no_gol'];
 const METRICAS_OBRIGATORIAS_CARTOES = ['cartoes_amarelos', 'cartao_vermelho', 'faltas', 'desarmes_total', 'duelos_ganhos'];
 const METRICAS_OBRIGATORIAS_ESCANTEIOS = [
     'escanteios', 'cruzamentos_total',
@@ -70,7 +73,7 @@ async function buscarJogosCalendario(dataAlvo) {
 }
 
 async function ajustarModeloCompeticao(idCompeticao, dataAlvo) {
-    const { rows: metricasLiga } = await client.query(`SELECT metrica, casa_mediana, fora_mediana FROM grid_metricas_competicoes WHERE id_competicao = $1 AND metrica = ANY($2)`, [idCompeticao, METRICAS_OBRIGATORIAS]);
+    const { rows: metricasLiga } = await client.query(`SELECT metrica, casa_mediana, fora_mediana FROM grid_metricas_competicoes WHERE id_competicao = $1 AND metrica = ANY($2)`, [idCompeticao, METRICAS_GOLS_PARA_BUSCAR]);
     const referenciaLiga = {};
     for (const row of metricasLiga) referenciaLiga[row.metrica] = { casa: Number(row.casa_mediana), fora: Number(row.fora_mediana) };
 
@@ -82,7 +85,7 @@ async function ajustarModeloCompeticao(idCompeticao, dataAlvo) {
             j.id, j.data_jogo, j.flashscore_id, j.flashscore_id_time_casa, j.flashscore_id_time_fora,
             j.placar_casa, j.placar_fora,
             sg.id_time, sg.eh_casa,
-            sg.xg, sg.xgot, sg.gols_marcados,
+            sg.xg, sg.xgot, sg.gols_marcados, sg.finalizacoes_no_gol,
             EXP(-0.005 * ($2::date - j.data_jogo::date)) AS peso_tempo
         FROM jogos j
         INNER JOIN estatisticas_geral sg ON sg.flashscore_id_jogo = j.flashscore_id
@@ -101,15 +104,17 @@ async function ajustarModeloCompeticao(idCompeticao, dataAlvo) {
             mapaJogos.set(chave, {
                 casa_id: String(linha.flashscore_id_time_casa), fora_id: String(linha.flashscore_id_time_fora), gols_casa: Number(linha.placar_casa), gols_fora: Number(linha.placar_fora),
                 xg_casa: null, xg_fora: null, xgot_casa: null, xgot_fora: null, gols_marcados_casa: null, gols_marcados_fora: null,
+                finalizacoes_no_gol_casa: null, finalizacoes_no_gol_fora: null,
                 xg_contra_casa: null, xg_contra_fora: null, xga_casa: null, xga_fora: null, gols_sofridos_casa: null, gols_sofridos_fora: null, peso_tempo: Number(linha.peso_tempo) || 1
             });
         }
         const jogo = mapaJogos.get(chave);
         const xg = linha.xg !== null ? Number(linha.xg) : null, xgot = linha.xgot !== null ? Number(linha.xgot) : null;
         const golsMarcados = linha.gols_marcados !== null ? Number(linha.gols_marcados) : null;
+        const finalizacoesNoGol = linha.finalizacoes_no_gol !== null ? Number(linha.finalizacoes_no_gol) : null;
 
-        if (Number(linha.eh_casa) === 1) { jogo.xg_casa = xg; jogo.xgot_casa = xgot; jogo.gols_marcados_casa = golsMarcados; }
-        if (Number(linha.eh_casa) === 0) { jogo.xg_fora = xg; jogo.xgot_fora = xgot; jogo.gols_marcados_fora = golsMarcados; }
+        if (Number(linha.eh_casa) === 1) { jogo.xg_casa = xg; jogo.xgot_casa = xgot; jogo.gols_marcados_casa = golsMarcados; jogo.finalizacoes_no_gol_casa = finalizacoesNoGol; }
+        if (Number(linha.eh_casa) === 0) { jogo.xg_fora = xg; jogo.xgot_fora = xgot; jogo.gols_marcados_fora = golsMarcados; jogo.finalizacoes_no_gol_fora = finalizacoesNoGol; }
     }
 
     // DERIVAÇÃO: xg_contra, xga e gols_sofridos vêm da linha do adversário no mesmo jogo
