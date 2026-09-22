@@ -1,7 +1,7 @@
 // ==========================================
 // CONFIGURAÇÃO DO SUPABASE
 // ==========================================
-const SUPABASE_URL = 'https://ecefcscibdyvgozwenmf.supabase.co/rest/v1/';
+const SUPABASE_URL = 'https://ecefcscibdyvgozwenmf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_300B_hoFIgaNp62KWvBAcQ_MBP-E9nj';
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
