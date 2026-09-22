@@ -2,7 +2,31 @@ const fs = require('fs');
 const { criarPool } = require('./db');
 const { execSync } = require('child_process');
 const pool = criarPool('site', { max: 20 });
+const dotenv = require('dotenv');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 
+const r2Config = dotenv.parse(fs.readFileSync('D:/segredos/r2.env'));
+const r2 = new S3Client({
+    region: 'auto',
+    endpoint: `https://${r2Config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: r2Config.R2_ACCESS_KEY_ID,
+        secretAccessKey: r2Config.R2_SECRET_ACCESS_KEY
+    }
+});
+
+async function enviarVipParaR2(data, jogosVip) {
+    try {
+        await r2.send(new PutObjectCommand({
+            Bucket: r2Config.R2_BUCKET,
+            Key: `${data}.json`,
+            Body: JSON.stringify(jogosVip),
+            ContentType: 'application/json'
+        }));
+    } catch (err) {
+        console.error(`   ⚠️ Falha ao enviar VIP de ${data} para o R2:`, err.message);
+    }
+}
 // =======================================================================
 // 📅 DEFINA AQUI O PERÍODO
 const DATA_INICIO = '2026-07-01';
@@ -400,15 +424,14 @@ async function rodarGerador() {
                 jogosDoDia.push(await processarJogo(res.rows[i], i + 1, res.rows.length));
             }
 
-            const jogosGratis = jogosDoDia.map(j => j.gratis);
+                        const jogosGratis = jogosDoDia.map(j => j.gratis);
             const jogosVip = jogosDoDia.map(j => j.vip);
 
             // 1. Salva o arquivo público (grátis) do dia
             fs.writeFileSync(`./public/dados/${data}.json`, JSON.stringify(jogosGratis), 'utf8');
 
-            // 2. Salva o arquivo privado (VIP) do dia, fora de public/
-            if (!fs.existsSync('./privado')) fs.mkdirSync('./privado', { recursive: true });
-            fs.writeFileSync(`./privado/${data}.json`, JSON.stringify(jogosVip), 'utf8');
+            // 2. Envia o arquivo VIP para o R2 (privado, nunca fica em disco nem no Git)
+            await enviarVipParaR2(data, jogosVip);
             // 2. Adiciona a data na lista do Menu se for nova
             if (!datasSalvas.includes(data)) {
                 datasSalvas.push(data);
