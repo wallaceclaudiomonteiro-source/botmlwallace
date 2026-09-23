@@ -12,6 +12,7 @@ supabaseClient.auth.onAuthStateChange(async (event, session) => {
         usuarioLogado = session.user;
         await carregarPerfil();
         fecharModalAuth();
+        carregarJogos(document.getElementById('seletor-data').value);
     } else {
         usuarioLogado = null;
         perfilUsuario = null;
@@ -84,7 +85,10 @@ async function carregarJogos(dataSelecionada) {
         const antiCache = new Date().getTime();
         const res = await fetch(`dados/${dataSelecionada}.json?v=${antiCache}`);
         const jogos = await res.json();
-
+        if (isPremium) {
+            const jogosVip = await buscarDadosVip(dataSelecionada);
+            mesclarVip(jogos, jogosVip);
+        }
         if (!Array.isArray(jogos) || jogos.length === 0) {
             listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Nenhum jogo encontrado para esta data.</p>`;
             return;
@@ -215,7 +219,25 @@ async function carregarPerfil() {
         isPremium = calcularPremium(perfilUsuario);
     }
 }
+async function buscarDadosVip(data) {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return [];
 
+    const resposta = await fetch(`/privado/${data}.json`, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resposta.ok) return [];
+    return await resposta.json();
+}
+
+function mesclarVip(jogosPublicos, jogosVip) {
+    const mapaVip = new Map(jogosVip.map(j => [String(j.flashscore_id_jogo), j.mercados]));
+    jogosPublicos.forEach(jogo => {
+        const mercadosVip = mapaVip.get(String(jogo.flashscore_id_jogo));
+        if (mercadosVip) Object.assign(jogo.mercados, mercadosVip);
+    });
+}
 function calcularPremium(perfil) {
     if (!perfil) return false;
     const agora = new Date();
