@@ -872,6 +872,6 @@ async function rodarBacktest(
  */
 
 rodarBacktest(
-    '2026-01-01',
-    '2026-09-20'
+    '2025-01-01',
+    '2026-09-23'
 );
