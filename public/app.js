@@ -325,8 +325,7 @@ function gerarHTMLMercados(mercados, prefixo) {
     if (mercados[`${prefixo}p_home`] === undefined) return `<div style="text-align:center; padding:30px; color:#94a3b8;">Dados não disponíveis para este período na base de dados.</div>`;
 
     const premiumClass = isPremium ? "" : "locked-content";
-    const avisoVIP = isPremium ? "" : `<div class="locked-warning" onclick="fecharModalJogo(); abrirLogin();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>`;
-
+    const avisoVIP = isPremium ? "" : `<div class="locked-warning" onclick="fecharModalJogo(); abrirModalAuth();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>`;
     return `
         <!-- CAIXINHAS MODERNAS NO TOPO DA TELA -->
         ${renderEsperadosGrid()}
