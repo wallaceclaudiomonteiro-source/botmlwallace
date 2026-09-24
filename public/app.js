@@ -126,6 +126,9 @@ async function carregarJogos(dataSelecionada) {
             const jogosVip = await buscarDadosVip(dataSelecionada);
             mesclarVip(jogos, jogosVip);
         }
+
+        const multipla = isPremium ? await buscarMultiplaDoDia(dataSelecionada) : [];
+        renderizarMultiplaDoDia(multipla);
         if (!Array.isArray(jogos) || jogos.length === 0) {
             listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Nenhum jogo encontrado para esta data.</p>`;
             return;
@@ -461,9 +464,9 @@ function gerarHTMLResultados(mercados) {
 
     if (isPremium) return html;
     return `<div class="locked-container">
-        <div class="locked-warning" onclick="fecharModalJogo(); abrirLogin();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
-        <div class="locked-content">${html}</div>
-    </div>`;
+    <div class="locked-warning" onclick="fecharModalJogo(); abrirModalAuth();">🔒 Acesso VIP Exigido<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
+    <div class="locked-content">${html}</div>
+</div>`;
 }
 async function abrirDetalhesJogo(jogo) {
     try {
