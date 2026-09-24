@@ -391,14 +391,16 @@
 
         <!-- Botão Entrar ou Status Logado (Integrado com app.js) -->
         <button id="btn-abrir-login" class="btn-login" onclick="abrirModalAuth()">Entrar / VIP</button>
-        
+
         <div id="info-usuario" class="user-status" style="display: none;">
             <span id="nome-usuario-logado"></span>
-            <span id="status-vip-badge" style="background: gold; color: black; padding: 2px 6px; border-radius: 4px; font-size: 11px;"></span>
-            <button onclick="fazerLogout()" style="font-size: 11px; padding: 4px 8px; background: transparent; color: #f87171; border-color: #f87171;">Sair</button>
+            <span id="status-vip-badge"
+                style="background: gold; color: black; padding: 2px 6px; border-radius: 4px; font-size: 11px;"></span>
+            <button onclick="fazerLogout()"
+                style="font-size: 11px; padding: 4px 8px; background: transparent; color: #f87171; border-color: #f87171;">Sair</button>
         </div>
     </div>
-
+    <div id="multipla-dia" style="margin-bottom: 20px;"></div>
     <!-- Lista de Jogos -->
     <div id="lista-jogos"></div>
 
@@ -421,7 +423,9 @@
                 <input type="email" id="email-login" placeholder="Seu e-mail">
                 <input type="password" id="senha-login" placeholder="Sua senha">
                 <button class="btn-submit" onclick="fazerLogin()">Entrar</button>
-                <p style="text-align: center; font-size: 13px; margin-top: 15px;">Não tem conta? <a href="#" onclick="alternarFormAuth('cadastro')" style="color: #60a5fa; text-decoration: none;">Cadastre-se e ganhe 3 dias grátis</a></p>
+                <p style="text-align: center; font-size: 13px; margin-top: 15px;">Não tem conta? <a href="#"
+                        onclick="alternarFormAuth('cadastro')"
+                        style="color: #60a5fa; text-decoration: none;">Cadastre-se e ganhe 3 dias grátis</a></p>
             </div>
 
             <!-- Formulário de Cadastro -->
@@ -433,7 +437,9 @@
                 <input type="date" id="nasc-cad">
                 <input type="text" id="time-cad" placeholder="Time do coração (opcional)">
                 <button class="btn-submit btn-comprar" onclick="fazerCadastro()">Criar Conta VIP</button>
-                <p style="text-align: center; font-size: 13px; margin-top: 15px;">Já tem conta? <a href="#" onclick="alternarFormAuth('login')" style="color: #60a5fa; text-decoration: none;">Faça login</a></p>
+                <p style="text-align: center; font-size: 13px; margin-top: 15px;">Já tem conta? <a href="#"
+                        onclick="alternarFormAuth('login')" style="color: #60a5fa; text-decoration: none;">Faça
+                        login</a></p>
             </div>
 
             <p id="auth-msg-erro" style="text-align: center; font-size: 14px; min-height: 20px; margin-bottom: 0;"></p>

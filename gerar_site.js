@@ -386,7 +386,69 @@ function enviarParaNuvem() {
         console.error('\n❌ Erro ao tentar enviar para a nuvem:', error.message);
     }
 }
+// ================================================================
+// MÚLTIPLA DO DIA — critérios de elegibilidade de uma perna
+// ================================================================
+const MULTIPLA_TAXA_MINIMA = 60;
+const MULTIPLA_AMOSTRA_MINIMA = 6;
 
+function selecionarPernasMultipla(jogoBase, mercados, prefixo, rotuloPeriodo) {
+    const pernas = [];
+    const inicioHist = `${prefixo}hist_`;
+
+    Object.keys(mercados).forEach(key => {
+        if (!key.startsWith(inicioHist)) return;
+        const hist = mercados[key];
+        if (!hist || hist.status !== 'ok') return;
+        if (hist.winrate < MULTIPLA_TAXA_MINIMA) return;
+        if (hist.total < MULTIPLA_AMOSTRA_MINIMA) return;
+
+        const merc = key.slice(inicioHist.length);
+        const prob = mercados[`${prefixo}p_${merc}`];
+
+        pernas.push({
+            flashscore_id_jogo: jogoBase.flashscore_id_jogo,
+            casa: jogoBase.casa,
+            fora: jogoBase.fora,
+            hora: jogoBase.hora,
+            pais_liga: jogoBase.pais_liga,
+            nome_competicao: jogoBase.nome_competicao,
+            periodo: rotuloPeriodo,
+            mercado: merc,
+            probabilidadeAtual: Number(prob),
+            amostra: hist.total,
+            greens: hist.greens,
+            reds: hist.reds,
+            taxaHistorica: hist.winrate
+        });
+    });
+
+    return pernas;
+}
+
+function montarMultiplaDoJogo(jogoCompleto) {
+    const mercadosCompletos = { ...jogoCompleto.gratis.mercados, ...jogoCompleto.vip.mercados };
+    const base = jogoCompleto.gratis;
+
+    return [
+        ...selecionarPernasMultipla(base, mercadosCompletos, '', 'FT'),
+        ...selecionarPernasMultipla(base, mercadosCompletos, 'ht_', 'HT'),
+        ...selecionarPernasMultipla(base, mercadosCompletos, 'st_', '2T')
+    ];
+}
+
+async function enviarMultiplaParaR2(data, multipla) {
+    try {
+        await r2.send(new PutObjectCommand({
+            Bucket: r2Config.R2_BUCKET,
+            Key: `multipla-${data}.json`,
+            Body: JSON.stringify(multipla),
+            ContentType: 'application/json'
+        }));
+    } catch (err) {
+        console.error(`   ⚠️ Falha ao enviar múltipla de ${data} para o R2:`, err.message);
+    }
+}
 async function rodarGerador() {
     try {
         console.log('\n==============================================');
@@ -424,7 +486,7 @@ async function rodarGerador() {
                 jogosDoDia.push(await processarJogo(res.rows[i], i + 1, res.rows.length));
             }
 
-                        const jogosGratis = jogosDoDia.map(j => j.gratis);
+            const jogosGratis = jogosDoDia.map(j => j.gratis);
             const jogosVip = jogosDoDia.map(j => j.vip);
 
             // 1. Salva o arquivo público (grátis) do dia
@@ -432,6 +494,9 @@ async function rodarGerador() {
 
             // 2. Envia o arquivo VIP para o R2 (privado, nunca fica em disco nem no Git)
             await enviarVipParaR2(data, jogosVip);
+            const multiplaDoDia = jogosDoDia.flatMap(montarMultiplaDoJogo)
+                .sort((a, b) => b.taxaHistorica - a.taxaHistorica);
+            await enviarMultiplaParaR2(data, multiplaDoDia);
             // 2. Adiciona a data na lista do Menu se for nova
             if (!datasSalvas.includes(data)) {
                 datasSalvas.push(data);

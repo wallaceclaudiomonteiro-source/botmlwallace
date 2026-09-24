@@ -750,5 +750,5 @@ async function processarDatasAPartirDe(dataInicial) {
     }
 }
 
-const dataEscolhida = '2026-07-01';
+const dataEscolhida = '2026-08-01';
 processarDatasAPartirDe(dataEscolhida);

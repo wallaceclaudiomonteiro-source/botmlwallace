@@ -47,7 +47,44 @@ function resultadosDoJogo(mercados) {
     return { g, r, p };
 }
 // Substitua as funções iniciar() e carregarJogos() por estas:
+async function buscarMultiplaDoDia(data) {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return [];
 
+    const resposta = await fetch(`/privado/multipla-${data}.json`, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resposta.ok) return [];
+    return await resposta.json();
+}
+
+function renderizarMultiplaDoDia(pernas) {
+    const container = document.getElementById('multipla-dia');
+    if (!container) return;
+
+    if (!isPremium) {
+        container.innerHTML = `<div class="market-group locked-container">
+            <div class="locked-warning" onclick="abrirModalAuth();">🔒 Múltipla VIP do Dia<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
+            <div class="locked-content"><h3>💎 Múltipla do Dia</h3><div class="prob-bar"><span>Carregando...</span></div></div>
+        </div>`;
+        return;
+    }
+
+    if (!pernas || pernas.length === 0) {
+        container.innerHTML = `<div class="market-group"><h3>💎 Múltipla do Dia</h3><div style="color:#64748b; text-align:center; padding:10px;">Nenhuma perna qualificada hoje.</div></div>`;
+        return;
+    }
+
+    const linhas = pernas.map(p => `
+        <div class="prob-bar">
+            <span>${p.casa} x ${p.fora} <small style="color:#64748b;">${p.pais_liga} • ${nomeMercado(p.mercado)} (${p.periodo})</small></span>
+            <strong style="color:#a6e3a1;">${p.taxaHistorica}% <small style="color:#64748b;">(${p.greens}G/${p.reds}R)</small></strong>
+        </div>
+    `).join('');
+
+    container.innerHTML = `<div class="market-group"><h3>💎 Múltipla do Dia — ${pernas.length} perna(s)</h3>${linhas}</div>`;
+}
 async function iniciar() {
     try {
         // Truque Anti-Cache: Obriga o navegador a sempre baixar a lista mais nova
