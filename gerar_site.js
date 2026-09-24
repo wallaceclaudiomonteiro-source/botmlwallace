@@ -29,7 +29,7 @@ async function enviarVipParaR2(data, jogosVip) {
 }
 // =======================================================================
 // 📅 DEFINA AQUI O PERÍODO
-const DATA_INICIO = '2026-07-01';
+const DATA_INICIO = '2026-09-01';
 const DATA_FIM = '2026-09-20';
 
 // ⚙️ A SUA TABELA EXATA DE PRIMEIRO/SEGUNDO TEMPO

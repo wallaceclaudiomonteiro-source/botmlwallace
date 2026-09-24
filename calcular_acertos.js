@@ -1,7 +1,7 @@
 const { criarClient } = require('./db');
 const client = criarClient('modelo');
 
-const LIMIAR_PROBABILIDADE = 50.0;
+const LIMIAR_PROBABILIDADE = 60.0;
 
 const mercados = [
     { prob: 'p_home', res: 'res_home', check: (golsC, golsF) => golsC > golsF },
