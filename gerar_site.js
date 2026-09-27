@@ -125,6 +125,20 @@ const mapEsperados = {
     'casa_cartoes_esperado': 'cartoes_casa',
     'fora_cartoes_esperado': 'cartoes_fora'
 };
+const cacheOdds = new Map();
+
+// Só os mercados abaixo têm odd salva em odds_partidas
+const MAPA_ODDS = {
+    home: ['home_abertura', 'home_fechamento'],
+    draw: ['draw_abertura', 'draw_fechamento'],
+    away: ['away_abertura', 'away_fechamento'],
+    btts_yes: ['btts_sim_abertura', 'btts_sim_fechamento'],
+    btts_no: ['btts_nao_abertura', 'btts_nao_fechamento'],
+    over15: ['over_15_abertura', 'over_15_fechamento'],
+    under15: ['under_15_abertura', 'under_15_fechamento'],
+    over25: ['over_25_abertura', 'over_25_fechamento'],
+    under25: ['under_25_abertura', 'under_25_fechamento']
+};
 async function obterPerfil(idTime) {
     const id = String(idTime);
     if (cachePerfis.has(id)) return cachePerfis.get(id);
@@ -194,7 +208,45 @@ async function buscarUltimos10Validos(idTime, ehCasa, perfilAdversario, config, 
     }
     return validos;
 }
+async function buscarOddsJogo(flashscoreId) {
+    const id = String(flashscoreId);
+    if (cacheOdds.has(id)) return cacheOdds.get(id);
+    const sql = `SELECT * FROM odds_partidas WHERE flashscore_id = $1 LIMIT 1`;
+    try {
+        const res = await pool.query(sql, [id]);
+        const odds = res.rows[0] || null;
+        cacheOdds.set(id, odds);
+        return odds;
+    } catch (e) { return null; }
+}
 
+async function calcularRoi(jogos, mercado) {
+    const colunas = MAPA_ODDS[mercado];
+    if (!colunas) return null; // mercado sem odd salva
+
+    const [colAbertura, colFechamento] = colunas;
+    let somaLucro = 0, contagem = 0;
+
+    for (const jogo of jogos) {
+        const odds = await buscarOddsJogo(jogo.flashscore_id_jogo);
+        if (!odds) continue;
+
+        const oddAbertura = odds[colAbertura] !== null && odds[colAbertura] !== undefined ? Number(odds[colAbertura]) : null;
+        const oddFechamento = odds[colFechamento] !== null && odds[colFechamento] !== undefined ? Number(odds[colFechamento]) : null;
+
+        let odd = null;
+        if (oddAbertura !== null && oddFechamento !== null) odd = (oddAbertura + oddFechamento) / 2;
+        else if (oddAbertura !== null) odd = oddAbertura;
+        else if (oddFechamento !== null) odd = oddFechamento;
+        if (odd === null || isNaN(odd)) continue;
+
+        somaLucro += jogo.resultado === 'GREEN' ? (odd - 1) : -1;
+        contagem++;
+    }
+
+    if (contagem === 0) return null;
+    return { roi: Number(((somaLucro / contagem) * 100).toFixed(1)), jogosComOdd: contagem };
+}
 async function consultarHistoricoFiltrado(opts, periodo) {
     const { idCasa, idFora, mercado, valorEsperado, dataJogo, flashscoreIdJogo } = opts;
     if (valorEsperado === null || valorEsperado === undefined || isNaN(valorEsperado)) return { status: 'indisponivel' };
@@ -231,7 +283,14 @@ async function consultarHistoricoFiltrado(opts, periodo) {
         const total = greens + reds;
 
         if (total === 0) return { status: 'sem_historico', greens: 0, reds: 0, total: 0, winrate: 0 };
-        return { status: 'ok', greens, reds, total, winrate: Number(((greens / total) * 100).toFixed(0)) };
+
+        const roiInfo = await calcularRoi(jogos, mercado);
+        return {
+            status: 'ok', greens, reds, total,
+            winrate: Number(((greens / total) * 100).toFixed(0)),
+            roi: roiInfo ? roiInfo.roi : null,
+            roiAmostra: roiInfo ? roiInfo.jogosComOdd : null
+        };
     } catch (err) { return { status: 'erro' }; }
 }
 

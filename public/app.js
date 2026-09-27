@@ -372,7 +372,14 @@ const esc = valor => valor === null || valor === undefined || valor === '' ? 'N/
 function formatarHistorico(hist) {
     if (!hist || typeof hist === 'string' || hist.status !== 'ok') return '';
     let cor = hist.winrate >= 70 ? '#a6e3a1' : (hist.winrate >= 60 ? '#f9e2af' : '#f38ba8');
-    return `<br><span style="font-size:11px;white-space:nowrap;margin-top:2px;display:inline-block;">🟢 <strong style="color:#a6e3a1;">${hist.greens}G</strong> &nbsp;|&nbsp; 🔴 <strong style="color:#f38ba8;">${hist.reds}R</strong> &nbsp;|&nbsp; 📈 <strong style="color:${cor};">${hist.winrate}%</strong></span>`;
+
+    let roiHtml = '';
+    if (hist.roi !== null && hist.roi !== undefined) {
+        const corRoi = hist.roi > 0 ? '#a6e3a1' : (hist.roi === 0 ? '#94a3b8' : '#f38ba8');
+        roiHtml = ` &nbsp;|&nbsp; 💰 <strong style="color:${corRoi};">${hist.roi > 0 ? '+' : ''}${hist.roi}% ROI</strong>`;
+    }
+
+    return `<br><span style="font-size:11px;white-space:nowrap;margin-top:2px;display:inline-block;">🟢 <strong style="color:#a6e3a1;">${hist.greens}G</strong> &nbsp;|&nbsp; 🔴 <strong style="color:#f38ba8;">${hist.reds}R</strong> &nbsp;|&nbsp; 📈 <strong style="color:${cor};">${hist.winrate}%</strong>${roiHtml}</span>`;
 }
 
 // O MOTOR QUE GERA OS MERCADOS PARA O PERÍODO CLICADO (FT, HT ou ST)
