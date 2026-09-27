@@ -825,5 +825,5 @@ async function processarDatasPeriodos(dataInicial) {
     }
 }
 
-const dataEscolhida = '2026-09-10';
+const dataEscolhida = '2026-07-01';
 processarDatasPeriodos(dataEscolhida);

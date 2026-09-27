@@ -46,7 +46,9 @@ const mercados = [
     { prob: 'p_casa_cartoes_over25', res: 'res_casa_cartoes_over25', check: (cartoesC) => cartoesC > 2.5 },
     { prob: 'p_fora_cartoes_over05', res: 'res_fora_cartoes_over05', check: (cartoesF) => cartoesF > 0.5 },
     { prob: 'p_fora_cartoes_over15', res: 'res_fora_cartoes_over15', check: (cartoesF) => cartoesF > 1.5 },
-    { prob: 'p_fora_cartoes_over25', res: 'res_fora_cartoes_over25', check: (cartoesF) => cartoesF > 2.5 }
+    { prob: 'p_fora_cartoes_over25', res: 'res_fora_cartoes_over25', check: (cartoesF) => cartoesF > 2.5 },
+    { prob: 'p_casa_cartoes_under25', res: 'res_casa_cartoes_under25', check: (cartoesC) => cartoesC < 2.5 },
+    { prob: 'p_fora_cartoes_under25', res: 'res_fora_cartoes_under25', check: (cartoesF) => cartoesF < 2.5 }
 ];
 
 async function validarResultados() {

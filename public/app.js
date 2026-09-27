@@ -211,8 +211,9 @@ async function carregarJogos(dataSelecionada) {
             mesclarVip(jogos, jogosVip);
         }
 
-        const multipla = isPremium ? await buscarMultiplaDoDia(dataSelecionada) : [];
-        renderizarMultiplaDoDia(multipla);
+        // Multipla do Dia desativada no site - funcoes mantidas acima (buscarMultiplaDoDia, renderizarMultiplaDoDia) pra reativar quando quiser
+        // const multipla = isPremium ? await buscarMultiplaDoDia(dataSelecionada) : [];
+        // renderizarMultiplaDoDia(multipla);
         if (!Array.isArray(jogos) || jogos.length === 0) {
             listaJogos.innerHTML = `<p style="text-align:center;color:#94a3b8;padding:20px;grid-column:1/-1;">Nenhum jogo encontrado para esta data.</p>`;
             return;
@@ -260,13 +261,14 @@ async function carregarJogos(dataSelecionada) {
             htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corTaxa}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corTaxa};">📈 ${taxaAcerto}% de acerto</span>`;
         }
 
-        if (isPremium) {
-            const roiDia = calcularRoiDoDia(jogos);
-            if (roiDia) {
-                const corRoi = roiDia.roi > 0 ? '#a6e3a1' : (roiDia.roi === 0 ? '#94a3b8' : '#f38ba8');
-                htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corRoi}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corRoi};">💰 ${roiDia.roi > 0 ? '+' : ''}${roiDia.roi}% ROI hoje</span>`;
-            }
-        }
+        // ROI desativado no site - calcularRoiDoDia() continua definida acima, intacta, pra reativar quando quiser
+        // if (isPremium) {
+        //     const roiDia = calcularRoiDoDia(jogos);
+        //     if (roiDia) {
+        //         const corRoi = roiDia.roi > 0 ? '#a6e3a1' : (roiDia.roi === 0 ? '#94a3b8' : '#f38ba8');
+        //         htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corRoi}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corRoi};">💰 ${roiDia.roi > 0 ? '+' : ''}${roiDia.roi}% ROI hoje</span>`;
+        //     }
+        // }
         resumoEl.innerHTML = htmlResumo;
 
     } catch (err) {
@@ -402,10 +404,11 @@ function formatarHistorico(hist) {
     let cor = hist.winrate >= 70 ? '#a6e3a1' : (hist.winrate >= 60 ? '#f9e2af' : '#f38ba8');
 
     let roiHtml = '';
-    if (hist.roi !== null && hist.roi !== undefined) {
-        const corRoi = hist.roi > 0 ? '#a6e3a1' : (hist.roi === 0 ? '#94a3b8' : '#f38ba8');
-        roiHtml = ` &nbsp;|&nbsp; 💰 <strong style="color:${corRoi};">${hist.roi > 0 ? '+' : ''}${hist.roi}% ROI</strong>`;
-    }
+    // ROI desativado no site (bloco mantido comentado pra reativar quando quiser)
+    // if (hist.roi !== null && hist.roi !== undefined) {
+    //     const corRoi = hist.roi > 0 ? '#a6e3a1' : (hist.roi === 0 ? '#94a3b8' : '#f38ba8');
+    //     roiHtml = ` &nbsp;|&nbsp; 💰 <strong style="color:${corRoi};">${hist.roi > 0 ? '+' : ''}${hist.roi}% ROI</strong>`;
+    // }
 
     return `<br><span style="font-size:11px;white-space:nowrap;margin-top:2px;display:inline-block;">🟢 <strong style="color:#a6e3a1;">${hist.greens}G</strong> &nbsp;|&nbsp; 🔴 <strong style="color:#f38ba8;">${hist.reds}R</strong> &nbsp;|&nbsp; 📈 <strong style="color:${cor};">${hist.winrate}%</strong>${roiHtml}</span>`;
 }

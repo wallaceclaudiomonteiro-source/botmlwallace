@@ -284,12 +284,13 @@ async function consultarHistoricoFiltrado(opts, periodo) {
 
         if (total === 0) return { status: 'sem_historico', greens: 0, reds: 0, total: 0, winrate: 0 };
 
-        const roiInfo = await calcularRoi(jogos, mercado);
+        // ROI desativado no site - calcularRoi() continua definida acima, intacta, pra reativar quando quiser
+        // const roiInfo = await calcularRoi(jogos, mercado);
         return {
             status: 'ok', greens, reds, total,
-            winrate: Number(((greens / total) * 100).toFixed(0)),
-            roi: roiInfo ? roiInfo.roi : null,
-            roiAmostra: roiInfo ? roiInfo.jogosComOdd : null
+            winrate: Number(((greens / total) * 100).toFixed(0))
+            // roi: roiInfo ? roiInfo.roi : null,
+            // roiAmostra: roiInfo ? roiInfo.jogosComOdd : null
         };
     } catch (err) { return { status: 'erro' }; }
 }
@@ -572,9 +573,10 @@ async function rodarGerador() {
 
             // 2. Envia o arquivo VIP para o R2 (privado, nunca fica em disco nem no Git)
             await enviarVipParaR2(data, jogosVip);
-            const multiplaDoDia = jogosDoDia.flatMap(montarMultiplaDoJogo)
-                .sort((a, b) => b.taxaHistorica - a.taxaHistorica);
-            await enviarMultiplaParaR2(data, multiplaDoDia);
+            // Multipla do Dia desativada no site - funcoes mantidas acima (selecionarPernasMultipla, montarMultiplaDoJogo, enviarMultiplaParaR2) pra reativar quando quiser
+            // const multiplaDoDia = jogosDoDia.flatMap(montarMultiplaDoJogo)
+            //     .sort((a, b) => b.taxaHistorica - a.taxaHistorica);
+            // await enviarMultiplaParaR2(data, multiplaDoDia);
             // 2. Adiciona a data na lista do Menu se for nova
             if (!datasSalvas.includes(data)) {
                 datasSalvas.push(data);
