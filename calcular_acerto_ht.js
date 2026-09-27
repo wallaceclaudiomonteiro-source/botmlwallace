@@ -174,12 +174,6 @@ async function validarResultados() {
                 continue;
             }
 
-            console.log(`\n======================================================`);
-            console.log(`[HT] ${analise.nome_time_casa} x ${analise.nome_time_fora}`);
-            console.log(`[ID JOGO] ${idJogo}`);
-            console.log(`[PERÍODO] ${periodo} -> ${periodoBanco}`);
-            console.log(`======================================================`);
-
             const queryStatsCasa = `
                 SELECT
                     escanteios,
@@ -206,42 +200,15 @@ async function validarResultados() {
                 LIMIT 1;
             `;
 
-            const statsCasaRes = await client.query(
-                queryStatsCasa,
-                [
-                    idJogo,
-                    analise.id_time_casa,
-                    periodoBanco
-                ]
-            );
+            const statsCasaRes = await client.query(queryStatsCasa, [idJogo, analise.id_time_casa, periodoBanco]);
+            const statsForaRes = await client.query(queryStatsFora, [idJogo, analise.id_time_fora, periodoBanco]);
+            const gols = await buscarGolsSumario(idJogo, periodo);
 
-            const statsForaRes = await client.query(
-                queryStatsFora,
-                [
-                    idJogo,
-                    analise.id_time_fora,
-                    periodoBanco
-                ]
-            );
-
-            const gols = await buscarGolsSumario(
-                idJogo,
-                periodo
-            );
-
-            if (
-                statsCasaRes.rows.length === 0 ||
-                statsForaRes.rows.length === 0 ||
-                !gols
-            ) {
-                console.log(
-                    `[AVISO] Sem estatísticas completas ${periodo} para ${analise.nome_time_casa} x ${analise.nome_time_fora}`
-                );
-
-                await marcarComoSemEstatistica(
-                    idJogo,
-                    periodo
-                );
+            if (statsCasaRes.rows.length === 0 || statsForaRes.rows.length === 0 || !gols) {
+                console.log(`[AVISO] Sem estatísticas completas ${periodo} para ${analise.nome_time_casa} x ${analise.nome_time_fora}`);
+                
+                // MUDANÇA: Passando a análise atual para a função para evitar re-query no banco
+                await marcarComoSemEstatistica(idJogo, periodo, analise);
 
                 jogosSemEstatistica++;
                 continue;
@@ -254,120 +221,71 @@ async function validarResultados() {
 
             const golsCasa = gols.golsCasa;
             const golsFora = gols.golsFora;
+            const totalGols = golsCasa + golsFora;
 
-            const totalGols =
-                golsCasa + golsFora;
+            const cantosCasa = Number(statsCasa.escanteios) || 0;
+            const cantosFora = Number(statsFora.escanteios) || 0;
+            const totalCantos = cantosCasa + cantosFora;
 
-            const cantosCasa =
-                Number(statsCasa.escanteios) || 0;
-
-            const cantosFora =
-                Number(statsFora.escanteios) || 0;
-
-            const totalCantos =
-                cantosCasa + cantosFora;
-
-            const cartoesCasa =
-                (Number(statsCasa.cartoes_amarelos) || 0) +
-                ((Number(statsCasa.cartao_vermelho) || 0) * 2);
-
-            const cartoesFora =
-                (Number(statsFora.cartoes_amarelos) || 0) +
-                ((Number(statsFora.cartao_vermelho) || 0) * 2);
-
-            const totalCartoes =
-                cartoesCasa + cartoesFora;
+            const cartoesCasa = (Number(statsCasa.cartoes_amarelos) || 0) + ((Number(statsCasa.cartao_vermelho) || 0) * 2);
+            const cartoesFora = (Number(statsFora.cartoes_amarelos) || 0) + ((Number(statsFora.cartao_vermelho) || 0) * 2);
+            const totalCartoes = cartoesCasa + cartoesFora;
 
             const updates = {};
 
+            // MUDANÇA: Padronizando MATCH ODDS para texto ao invés de números (1, 0, -1)
             if (golsCasa > golsFora) {
-                updates.res_match_odds = 1;
+                updates.res_match_odds = 'CASA';
             } else if (golsCasa === golsFora) {
-                updates.res_match_odds = 0;
+                updates.res_match_odds = 'EMPATE';
             } else {
-                updates.res_match_odds = -1;
+                updates.res_match_odds = 'FORA';
             }
 
             for (const mercado of mercados) {
-                const probabilidade =
-                    parseFloat(analise[mercado.prob]);
+                const probabilidade = parseFloat(analise[mercado.prob]);
 
-                if (
-                    !Number.isFinite(probabilidade) ||
-                    probabilidade <= LIMIAR_PROBABILIDADE
-                ) {
-                    continue;
-                }
+                if (Number.isFinite(probabilidade) && probabilidade > LIMIAR_PROBABILIDADE) {
+                    let bateu = false;
 
-                let bateu = false;
+                    if (mercado.prob.includes('btts') || ['p_home', 'p_draw', 'p_away'].includes(mercado.prob)) {
+                        bateu = mercado.check(golsCasa, golsFora);
+                    } else if (mercado.prob.includes('casa_over') && !mercado.prob.includes('cantos') && !mercado.prob.includes('cartoes')) {
+                        bateu = mercado.check(golsCasa);
+                    } else if (mercado.prob.includes('fora_over') && !mercado.prob.includes('cantos') && !mercado.prob.includes('cartoes')) {
+                        bateu = mercado.check(golsFora);
+                    } else if (mercado.prob.includes('casa_cantos')) {
+                        bateu = mercado.check(cantosCasa);
+                    } else if (mercado.prob.includes('fora_cantos')) {
+                        bateu = mercado.check(cantosFora);
+                    } else if (mercado.prob.includes('cantos')) {
+                        bateu = mercado.check(totalCantos);
+                    } else if (mercado.prob.includes('casa_cartoes')) {
+                        bateu = mercado.check(cartoesCasa);
+                    } else if (mercado.prob.includes('fora_cartoes')) {
+                        bateu = mercado.check(cartoesFora);
+                    } else if (mercado.prob.includes('cartoes')) {
+                        bateu = mercado.check(totalCartoes);
+                    } else {
+                        bateu = mercado.check(totalGols);
+                    }
 
-                if (
-                    mercado.prob.includes('btts') ||
-                    ['p_home', 'p_draw', 'p_away'].includes(mercado.prob)
-                ) {
-                    bateu =
-                        mercado.check(
-                            golsCasa,
-                            golsFora
-                        );
-                } else if (
-                    mercado.prob.includes('casa_over') &&
-                    !mercado.prob.includes('cantos') &&
-                    !mercado.prob.includes('cartoes')
-                ) {
-                    bateu =
-                        mercado.check(golsCasa);
-                } else if (
-                    mercado.prob.includes('fora_over') &&
-                    !mercado.prob.includes('cantos') &&
-                    !mercado.prob.includes('cartoes')
-                ) {
-                    bateu =
-                        mercado.check(golsFora);
-                } else if (
-                    mercado.prob.includes('casa_cantos')
-                ) {
-                    bateu =
-                        mercado.check(cantosCasa);
-                } else if (
-                    mercado.prob.includes('fora_cantos')
-                ) {
-                    bateu =
-                        mercado.check(cantosFora);
-                } else if (
-                    mercado.prob.includes('cantos')
-                ) {
-                    bateu =
-                        mercado.check(totalCantos);
-                } else if (
-                    mercado.prob.includes('casa_cartoes')
-                ) {
-                    bateu =
-                        mercado.check(cartoesCasa);
-                } else if (
-                    mercado.prob.includes('fora_cartoes')
-                ) {
-                    bateu =
-                        mercado.check(cartoesFora);
-                } else if (
-                    mercado.prob.includes('cartoes')
-                ) {
-                    bateu =
-                        mercado.check(totalCartoes);
+                    // MUDANÇA: Substituindo 1 e 0 por 'GREEN' e 'RED'
+                    if (bateu) {
+                        updates[mercado.res] = 'GREEN';
+                        relatorioMercados[periodo][mercado.res].green++;
+                    } else {
+                        updates[mercado.res] = 'RED';
+                        relatorioMercados[periodo][mercado.res].red++;
+                    }
                 } else {
-                    bateu =
-                        mercado.check(totalGols);
-                }
-
-                if (bateu) {
-                    updates[mercado.res] = 1;
-                    relatorioMercados[periodo][mercado.res].green++;
-                } else {
-                    updates[mercado.res] = 0;
-                    relatorioMercados[periodo][mercado.res].red++;
+                    // MUDANÇA: Resetar resultados (NULL) caso a probabilidade atualize para baixo do limiar
+                    updates[mercado.res] = null;
                 }
             }
 
+            // ... (código anterior)
+            
             const campos = Object.keys(updates);
 
             if (campos.length > 0) {
@@ -376,9 +294,7 @@ async function validarResultados() {
 
                 campos.forEach((campo, index) => {
                     valores.push(updates[campo]);
-                    atribuicoes.push(
-                        `${campo} = $${index + 1}`
-                    );
+                    atribuicoes.push(`${campo} = $${index + 1}`);
                 });
 
                 valores.push(idJogo);
@@ -391,112 +307,57 @@ async function validarResultados() {
                       AND periodo = $${campos.length + 2};
                 `;
 
-                await client.query(
-                    updateQuery,
-                    valores
-                );
+                await client.query(updateQuery, valores);
             }
-
-            console.log(
-                `[VALIDADO HT] ${analise.nome_time_casa} x ${analise.nome_time_fora} | ${periodo} | Gols: ${golsCasa}-${golsFora} | Cantos: ${cantosCasa}-${cantosFora} | Cartões: ${cartoesCasa}-${cartoesFora}`
-            );
         }
 
         console.log(`\n======================================================`);
         console.log(`📊 RELATÓRIO DE VALIDAÇÃO HT CONCLUÍDO`);
         console.log(`======================================================`);
         console.log(`Total de análises HT processadas : ${jogosProcessados}`);
-        console.log(`Total sem estatística             : ${jogosSemEstatistica}`);
+        console.log(`Total sem estatística (0_EST)    : ${jogosSemEstatistica}`);
         console.log(`======================================================`);
+        
         for (const periodo of ['1T', '2T']) {
             console.log(`\n======================================================`);
             console.log(`🏆 DESEMPENHO ${periodo} - Probabilidade > ${LIMIAR_PROBABILIDADE}%`);
             console.log(`======================================================`);
 
             for (const key in relatorioMercados[periodo]) {
-                const greens =
-                    relatorioMercados[periodo][key].green;
-
-                const reds =
-                    relatorioMercados[periodo][key].red;
-
-                const totalSugerido =
-                    greens + reds;
+                const greens = relatorioMercados[periodo][key].green;
+                const reds = relatorioMercados[periodo][key].red;
+                const totalSugerido = greens + reds;
 
                 if (totalSugerido > 0) {
-                    const winRate =
-                        ((greens / totalSugerido) * 100).toFixed(1);
+                    const winRate = ((greens / totalSugerido) * 100).toFixed(1);
+                    const nomeMercado = key.replace('res_', '').padEnd(28);
 
-                    const nomeMercado =
-                        key.replace('res_', '').padEnd(28);
-
-                    console.log(
-                        `Mercado: ${nomeMercado} | Sugestões: ${String(totalSugerido).padEnd(6)} | 🟢 GREENS: ${String(greens).padEnd(6)} | 🔴 REDS: ${String(reds).padEnd(6)} | 🎯 Taxa: ${winRate}%`
-                    );
+                    console.log(`Mercado: ${nomeMercado} | Sugestões: ${String(totalSugerido).padEnd(6)} | 🟢 GREENS: ${String(greens).padEnd(6)} | 🔴 REDS: ${String(reds).padEnd(6)} | 🎯 Taxa: ${winRate}%`);
                 }
             }
         }
-
         console.log(`\n=====================================================\n`);
 
     } catch (err) {
-        console.error(
-            '[ERRO FATAL] Falha no validador HT:',
-            err
-        );
-
+        console.error('[ERRO FATAL] Falha no validador HT:', err);
         process.exitCode = 1;
-
     } finally {
         await client.end();
     }
 }
 
-async function marcarComoSemEstatistica(
-    idJogo,
-    periodo
-) {
-    const query = `
-        SELECT *
-        FROM analise_jogos_ht
-        WHERE flashscore_id_jogo = $1
-          AND periodo = $2
-        LIMIT 1;
-    `;
-
-    const res = await client.query(
-        query,
-        [
-            idJogo,
-            periodo
-        ]
-    );
-
-    if (res.rows.length === 0) {
-        return;
-    }
-
-    const analise = res.rows[0];
-
+// MUDANÇA: Função muito mais leve, não faz nova query SELECT, usa a analise já carregada
+async function marcarComoSemEstatistica(idJogo, periodo, analise) {
     const colunasParaAnular = [];
 
-    colunasParaAnular.push(
-        `res_match_odds = -1`
-    );
+    // MUDANÇA: Usando '0_EST' ao invés de '-1'
+    colunasParaAnular.push(`res_match_odds = '0_EST'`);
 
     for (const mercado of mercados) {
-        const probabilidade =
-            parseFloat(
-                analise[mercado.prob]
-            );
+        const probabilidade = parseFloat(analise[mercado.prob]);
 
-        if (
-            Number.isFinite(probabilidade) &&
-            probabilidade > LIMIAR_PROBABILIDADE
-        ) {
-            colunasParaAnular.push(
-                `${mercado.res} = -1`
-            );
+        if (Number.isFinite(probabilidade) && probabilidade > LIMIAR_PROBABILIDADE) {
+            colunasParaAnular.push(`${mercado.res} = '0_EST'`);
         }
     }
 
@@ -508,13 +369,7 @@ async function marcarComoSemEstatistica(
               AND periodo = $2;
         `;
 
-        await client.query(
-            updateQuery,
-            [
-                idJogo,
-                periodo
-            ]
-        );
+        await client.query(updateQuery, [idJogo, periodo]);
     }
 }
 
