@@ -348,7 +348,11 @@ function separarMercados(mercados) {
             gratis[key] = mercados[key];
             return;
         }
-
+        // odd_ é sempre VIP
+        if (key.startsWith('odd_')) {
+            vip[key] = mercados[key];
+            return;
+        }
         // p_ / res_ / hist_ do FT: decide pela lista de mercados grátis
         const prefixos = ['p_', 'res_', 'hist_'];
         const prefixo = prefixos.find(p => key.startsWith(p));
@@ -381,7 +385,22 @@ async function processarJogo(jogoFT, indice, total) {
 
     // PROCESSA FT
     await varrerMercadosDaLinha(jogoFT, '', 'FT', filtroMatch, mercados);
-
+    // Salva a odd do PRÓPRIO jogo de hoje (para ROI do dia, diferente do ROI histórico)
+    const oddsHoje = await buscarOddsJogo(jogoFT.flashscore_id_jogo);
+    if (oddsHoje) {
+        Object.keys(MAPA_ODDS).forEach(merc => {
+            const [colAbertura, colFechamento] = MAPA_ODDS[merc];
+            const oa = oddsHoje[colAbertura] !== null && oddsHoje[colAbertura] !== undefined ? Number(oddsHoje[colAbertura]) : null;
+            const of_ = oddsHoje[colFechamento] !== null && oddsHoje[colFechamento] !== undefined ? Number(oddsHoje[colFechamento]) : null;
+            let odd = null;
+            if (oa !== null && of_ !== null) odd = (oa + of_) / 2;
+            else if (oa !== null) odd = oa;
+            else if (of_ !== null) odd = of_;
+            if (odd !== null && !isNaN(odd)) {
+                mercados[`odd_${merc}`] = Number(odd.toFixed(2));
+            }
+        });
+    }
     // PROCESSA HT (1T) e ST (2T)
     try {
         const sqlTempos = `SELECT * FROM public.${TABELA_TEMPOS} WHERE flashscore_id_jogo = $1`;

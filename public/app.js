@@ -46,6 +46,26 @@ function resultadosDoJogo(mercados) {
     });
     return { g, r, p };
 }
+function calcularRoiDoDia(jogos) {
+    let somaLucro = 0, contagem = 0;
+    jogos.forEach(jogo => {
+        const m = jogo.mercados || {};
+        Object.keys(m).forEach(key => {
+            if (!key.startsWith('odd_')) return;
+            const merc = key.slice(4);
+            const prob = Number(m[`p_${merc}`]);
+            if (isNaN(prob) || prob < PROB_MINIMA_PREVISAO) return;
+            const res = m[`res_${merc}`];
+            if (res !== 'GREEN' && res !== 'RED') return;
+            const odd = Number(m[key]);
+            if (isNaN(odd)) return;
+            somaLucro += res === 'GREEN' ? (odd - 1) : -1;
+            contagem++;
+        });
+    });
+    if (contagem === 0) return null;
+    return { roi: Number(((somaLucro / contagem) * 100).toFixed(1)), contagem };
+}
 // Substitua as funções iniciar() e carregarJogos() por estas:
 async function buscarMultiplaDoDia(data) {
     const { data: sessionData } = await supabaseClient.auth.getSession();
@@ -238,6 +258,14 @@ async function carregarJogos(dataSelecionada) {
 
         if (totalFechados > 0) {
             htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corTaxa}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corTaxa};">📈 ${taxaAcerto}% de acerto</span>`;
+        }
+
+        if (isPremium) {
+            const roiDia = calcularRoiDoDia(jogos);
+            if (roiDia) {
+                const corRoi = roiDia.roi > 0 ? '#a6e3a1' : (roiDia.roi === 0 ? '#94a3b8' : '#f38ba8');
+                htmlResumo += `<span style="background: rgba(255,255,255,0.05); color: ${corRoi}; padding: 6px 12px; border-radius: 6px; border: 1px solid ${corRoi};">💰 ${roiDia.roi > 0 ? '+' : ''}${roiDia.roi}% ROI hoje</span>`;
+            }
         }
         resumoEl.innerHTML = htmlResumo;
 
@@ -521,7 +549,17 @@ function gerarHTMLResultados(mercados) {
             else if (res === 'RED') { icone = '🔴'; cor = '#f38ba8'; texto = 'RED'; r++; }
             else p++;
 
-            linhas += `<div class="prob-bar"><span>${nomeMercado(merc)}<small style="color:#64748b;">Prob: ${esc(mercados[key])}%</small></span><strong style="color:${cor};">${icone} ${texto}</strong></div>`;
+            let lucroHtml = '';
+            if (prefixo === '' && (res === 'GREEN' || res === 'RED')) {
+                const odd = mercados[`odd_${merc}`];
+                if (odd !== undefined && odd !== null) {
+                    const lucro = res === 'GREEN' ? (odd - 1) : -1;
+                    const corLucro = lucro > 0 ? '#a6e3a1' : '#f38ba8';
+                    lucroHtml = `<small style="color:${corLucro};">Odd ${odd} • ${lucro > 0 ? '+' : ''}${lucro.toFixed(2)}u</small>`;
+                }
+            }
+
+            linhas += `<div class="prob-bar"><span>${nomeMercado(merc)}<small style="color:#64748b;">Prob: ${esc(mercados[key])}%</small>${lucroHtml}</span><strong style="color:${cor};">${icone} ${texto}</strong></div>`;
         });
 
         if (!linhas) return;
