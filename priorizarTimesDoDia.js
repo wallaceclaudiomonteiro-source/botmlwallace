@@ -168,7 +168,7 @@ async function atualizarTimesDasCompeticoes(client, dataAlvo) {
 async function executar() {
     try {
 
-        const dataAlvo = '2026-09-23';
+        const dataAlvo = '2026-09-24';
         // ==========================================
         // 1. MANTÉM A LÓGICA ATUAL DOS TIMES
         // ==========================================

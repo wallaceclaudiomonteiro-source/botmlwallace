@@ -56,7 +56,6 @@ async function rodarBacktest(dataInicio, dataFim) {
               AND placar_casa IS NOT NULL
               AND placar_fora IS NOT NULL
               AND id_competicao IS NOT NULL
-              AND mle_escanteios_total IS NULL
             ORDER BY data_jogo::date ASC, id ASC
         `, [dataInicio, dataFim]);
 

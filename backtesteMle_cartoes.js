@@ -20,7 +20,6 @@ async function rodarBacktest(dataInicio, dataFim) {
             FROM jogos
             WHERE data_jogo::date BETWEEN $1::date AND $2::date
             AND placar_casa IS NOT NULL AND placar_fora IS NOT NULL AND id_competicao IS NOT NULL 
-            AND mle_cartoes_total IS NULL -- <== TRAVA ADICIONADA AQUI
             ORDER BY data_jogo::date ASC, id ASC
         `, [dataInicio, dataFim]);
 

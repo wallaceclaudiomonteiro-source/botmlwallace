@@ -59,31 +59,95 @@ async function buscarMultiplaDoDia(data) {
     return await resposta.json();
 }
 
+function iconeMercado(chave) {
+    if (chave.includes('cantos_')) return '🚩';
+    if (chave.includes('cartoes_')) return '🟨';
+    if (chave.startsWith('btts')) return '🤝';
+    return '⚽';
+}
+
+function diversificarMultipla(pernas) {
+    const vistos = new Set();
+    const diversificada = [];
+    pernas.forEach(p => {
+        if (vistos.has(p.flashscore_id_jogo)) return;
+        vistos.add(p.flashscore_id_jogo);
+        diversificada.push(p);
+    });
+    return diversificada;
+}
+
+let ultimaMultiplaDiversificada = [];
+
 function renderizarMultiplaDoDia(pernas) {
     const container = document.getElementById('multipla-dia');
     if (!container) return;
 
     if (!isPremium) {
-        container.innerHTML = `<div class="market-group locked-container">
+        container.innerHTML = `<div class="market-group multipla-card locked-container">
             <div class="locked-warning" onclick="abrirModalAuth();">🔒 Múltipla VIP do Dia<br><span style="font-size:12px; font-weight:normal; color:#fff">Faça login para desbloquear</span></div>
             <div class="locked-content"><h3>💎 Múltipla do Dia</h3><div class="prob-bar"><span>Carregando...</span></div></div>
         </div>`;
         return;
     }
 
-    if (!pernas || pernas.length === 0) {
-        container.innerHTML = `<div class="market-group"><h3>💎 Múltipla do Dia</h3><div style="color:#64748b; text-align:center; padding:10px;">Nenhuma perna qualificada hoje.</div></div>`;
+    ultimaMultiplaDiversificada = diversificarMultipla(pernas);
+
+    if (ultimaMultiplaDiversificada.length === 0) {
+        container.innerHTML = `<div class="market-group multipla-card"><h3>💎 Múltipla do Dia</h3><div style="color:#64748b; text-align:center; padding:10px;">Nenhuma perna qualificada hoje.</div></div>`;
         return;
     }
 
-    const linhas = pernas.map(p => `
-        <div class="prob-bar">
-            <span>${p.casa} x ${p.fora} <small style="color:#64748b;">${p.pais_liga} • ${nomeMercado(p.mercado)} (${p.periodo})</small></span>
-            <strong style="color:#a6e3a1;">${p.taxaHistorica}% <small style="color:#64748b;">(${p.greens}G/${p.reds}R)</small></strong>
+    container.innerHTML = `
+        <div class="market-group multipla-card">
+            <div class="multipla-header">
+                <h3>💎 Múltipla do Dia</h3>
+                <div class="multipla-tabs">
+                    <button id="tier-btn-segura" class="tier-btn active" onclick="mudarTierMultipla('segura')">Segura (4)</button>
+                    <button id="tier-btn-equilibrada" class="tier-btn" onclick="mudarTierMultipla('equilibrada')">Equilibrada (8)</button>
+                    <button id="tier-btn-ousada" class="tier-btn" onclick="mudarTierMultipla('ousada')">Ousada (10)</button>
+                </div>
+            </div>
+            <div id="multipla-corpo"></div>
         </div>
-    `).join('');
+    `;
 
-    container.innerHTML = `<div class="market-group"><h3>💎 Múltipla do Dia — ${pernas.length} perna(s)</h3>${linhas}</div>`;
+    window.mudarTierMultipla = function (tier) {
+        ['segura', 'equilibrada', 'ousada'].forEach(t => {
+            document.getElementById(`tier-btn-${t}`).classList.toggle('active', t === tier);
+        });
+
+        const tamanhos = { segura: 4, equilibrada: 8, ousada: 10 };
+        const qtd = Math.min(tamanhos[tier], ultimaMultiplaDiversificada.length);
+        const selecionadas = ultimaMultiplaDiversificada.slice(0, qtd);
+
+        const chanceCombinada = selecionadas.reduce((acc, p) => acc * (p.probabilidadeAtual / 100), 1) * 100;
+        const corChance = chanceCombinada >= 50 ? '#a6e3a1' : (chanceCombinada >= 30 ? '#f9e2af' : '#f38ba8');
+
+        const linhas = selecionadas.map(p => `
+            <div class="multipla-perna">
+                <div class="multipla-perna-jogo">
+                    <strong>${p.casa} x ${p.fora}</strong>
+                    <small>${p.pais_liga} • ${p.nome_competicao}</small>
+                </div>
+                <div class="multipla-perna-mercado">
+                    <span>${iconeMercado(p.mercado)} ${nomeMercado(p.mercado)} (${p.periodo})</span>
+                    <small>Histórico: ${p.greens}G/${p.reds}R (${p.taxaHistorica}%)</small>
+                </div>
+                <div class="multipla-perna-prob">${p.probabilidadeAtual.toFixed(0)}%</div>
+            </div>
+        `).join('');
+
+        document.getElementById('multipla-corpo').innerHTML = `
+            <div class="multipla-combinada">
+                <span>Chance combinada (${selecionadas.length} pernas)</span>
+                <strong style="color:${corChance};">${chanceCombinada.toFixed(0)}%</strong>
+            </div>
+            ${linhas}
+        `;
+    };
+
+    mudarTierMultipla('segura');
 }
 async function iniciar() {
     try {
